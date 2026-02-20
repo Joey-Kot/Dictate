@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Dictate</string>
+    <string name="app_name" translatable="false">ASR</string>
 
     <string name="dictate_lang_afrikaans">Afrikaans</string>
     <string name="dictate_lang_albanian">Albanian</string>
