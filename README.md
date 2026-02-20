@@ -38,6 +38,10 @@
 
 **The app is available on [Google Play](https://play.google.com/store/apps/details?id=net.devemperor.dictate)** (for a small fee to support me and the future development), so you get easy installation and free lifetime updates. Just click on the badge above or [on this link](https://play.google.com/store/apps/details?id=net.devemperor.dictate).
 
+## Development
+
+Open-source builds and CI do not require a `google-services.json` file.
+
 
 
 ## License
