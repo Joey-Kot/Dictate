@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="dictate_input_languages">
+        <item>@string/dictate_detect_automatically</item>
+        <item>@string/dictate_lang_afrikaans</item>
+        <item>@string/dictate_lang_albanian</item>
+        <item>@string/dictate_lang_arabic</item>
+        <item>@string/dictate_lang_armenian</item>
+        <item>@string/dictate_lang_azerbaijani</item>
+        <item>@string/dictate_lang_basque</item>
+        <item>@string/dictate_lang_belarusian</item>
+        <item>@string/dictate_lang_bengali</item>
+        <item>@string/dictate_lang_bulgarian</item>
+        <item>@string/dictate_lang_cantonese_cn</item>
+        <item>@string/dictate_lang_cantonese_hk</item>
+        <item>@string/dictate_lang_catalan</item>
+        <item>@string/dictate_lang_czech</item>
+        <item>@string/dictate_lang_danish</item>
+        <item>@string/dictate_lang_dutch</item>
+        <item>@string/dictate_lang_english</item>
+        <item>@string/dictate_lang_estonian</item>
+        <item>@string/dictate_lang_finnish</item>
+        <item>@string/dictate_lang_french</item>
+        <item>@string/dictate_lang_galician</item>
+        <item>@string/dictate_lang_german</item>
+        <item>@string/dictate_lang_greek</item>
+        <item>@string/dictate_lang_hebrew</item>
+        <item>@string/dictate_lang_hindi</item>
+        <item>@string/dictate_lang_hungarian</item>
+        <item>@string/dictate_lang_indonesian</item>
+        <item>@string/dictate_lang_italian</item>
+        <item>@string/dictate_lang_japanese</item>
+        <item>@string/dictate_lang_kazakh</item>
+        <item>@string/dictate_lang_korean</item>
+        <item>@string/dictate_lang_latvian</item>
+        <item>@string/dictate_lang_lithuanian</item>
+        <item>@string/dictate_lang_macedonian</item>
+        <item>@string/dictate_lang_mandarin_cn</item>
+        <item>@string/dictate_lang_mandarin_tw</item>
+        <item>@string/dictate_lang_marathi</item>
+        <item>@string/dictate_lang_nepali</item>
+        <item>@string/dictate_lang_nynorsk</item>
+        <item>@string/dictate_lang_persian</item>
+        <item>@string/dictate_lang_polish</item>
+        <item>@string/dictate_lang_portuguese</item>
+        <item>@string/dictate_lang_punjabi</item>
+        <item>@string/dictate_lang_romanian</item>
+        <item>@string/dictate_lang_russian</item>
+        <item>@string/dictate_lang_serbian</item>
+        <item>@string/dictate_lang_slovak</item>
+        <item>@string/dictate_lang_slovenian</item>
+        <item>@string/dictate_lang_spanish</item>
+        <item>@string/dictate_lang_swahili</item>
+        <item>@string/dictate_lang_swedish</item>
+        <item>@string/dictate_lang_tamil</item>
+        <item>@string/dictate_lang_thai</item>
+        <item>@string/dictate_lang_turkish</item>
+        <item>@string/dictate_lang_ukrainian</item>
+        <item>@string/dictate_lang_urdu</item>
+        <item>@string/dictate_lang_vietnamese</item>
+        <item>@string/dictate_lang_welsh</item>
+    </string-array>
+    <string-array name="dictate_app_languages">
+        <item>@string/dictate_language_system</item>
+        <item>@string/dictate_language_english</item>
+        <item>@string/dictate_language_german</item>
+        <item>@string/dictate_language_spanish</item>
+        <item>@string/dictate_language_portuguese</item>
+    </string-array>
+    <string-array name="dictate_app_languages_values">
+        <item>system</item>
+        <item>en</item>
+        <item>de</item>
+        <item>es</item>
+        <item>pt</item>
+    </string-array>
+    <string-array name="dictate_input_languages_values">
+        <item>detect</item>
+        <item>af</item>
+        <item>sq</item>
+        <item>ar</item>
+        <item>hy</item>
+        <item>az</item>
+        <item>eu</item>
+        <item>be</item>
+        <item>bn</item>
+        <item>bg</item>
+        <item>yue-CN</item>
+        <item>yue-HK</item>
+        <item>ca</item>
+        <item>cs</item>
+        <item>da</item>
+        <item>nl</item>
+        <item>en</item>
+        <item>et</item>
+        <item>fi</item>
+        <item>fr</item>
+        <item>gl</item>
+        <item>de</item>
+        <item>el</item>
+        <item>he</item>
+        <item>hi</item>
+        <item>hu</item>
+        <item>id</item>
+        <item>it</item>
+        <item>ja</item>
+        <item>kk</item>
+        <item>ko</item>
+        <item>lv</item>
+        <item>lt</item>
+        <item>mk</item>
+        <item>zh-CN</item>
+        <item>zh-TW</item>
+        <item>mr</item>
+        <item>ne</item>
+        <item>nn</item>
+        <item>fa</item>
+        <item>pl</item>
+        <item>pt</item>
+        <item>pa</item>
+        <item>ro</item>
+        <item>ru</item>
+        <item>sr</item>
+        <item>sk</item>
+        <item>sl</item>
+        <item>es</item>
+        <item>sw</item>
+        <item>sv</item>
+        <item>ta</item>
+        <item>th</item>
+        <item>tr</item>
+        <item>uk</item>
+        <item>ur</item>
+        <item>vi</item>
+        <item>cy</item>
+    </string-array>
+    <string-array name="dictate_record_different_languages">
+        <!-- 1. Detect automatically (Spezialfall: hier unverändert "Detect") -->
+        <item>@string/dictate_detect_automatically</item>
+        <!-- 2. Afrikaans -->
+        <item>Neem op</item>
+        <!-- 3. Albanian -->
+        <item>Regjistro</item>
+        <!-- 4. Arabic -->
+        <item>تسجيل</item>
+        <!-- 5. Armenian -->
+        <item>Գրանցել</item>
+        <!-- 6. Azerbaijani -->
+        <item>Qeyd et</item>
+        <!-- 7. Basque -->
+        <item>Grabatu</item>
+        <!-- 8. Belarusian -->
+        <item>Запісаць</item>
+        <!-- 9. Bengali -->
+        <item>রেকর্ড করুন</item>
+        <!-- 10. Bulgarian -->
+        <item>Запиши</item>
+        <!-- 11. Cantonese (CN) -->
+        <item>錄音</item>
+        <!-- 12. Cantonese (HK) -->
+        <item>錄音</item>
+        <!-- 13. Catalan -->
+        <item>Gravar</item>
+        <!-- 14. Czech -->
+        <item>Nahrát</item>
+        <!-- 15. Danish -->
+        <item>Optag</item>
+        <!-- 16. Dutch -->
+        <item>Opnemen</item>
+        <!-- 17. English -->
+        <item>Record</item>
+        <!-- 18. Estonian -->
+        <item>Salvesta</item>
+        <!-- 19. Finnish -->
+        <item>Nauhoita</item>
+        <!-- 20. French -->
+        <item>Enregistrer</item>
+        <!-- 21. Galician -->
+        <item>Gravar</item>
+        <!-- 22. German -->
+        <item>Aufnehmen</item>
+        <!-- 23. Greek -->
+        <item>Ηχογράφησε</item>
+        <!-- 24. Hebrew -->
+        <item>הקלט</item>
+        <!-- 25. Hindi -->
+        <item>रिकॉर्ड</item>
+        <!-- 26. Hungarian -->
+        <item>Felvétel</item>
+        <!-- 27. Indonesian -->
+        <item>Rekam</item>
+        <!-- 28. Italian -->
+        <item>Registra</item>
+        <!-- 29. Japanese -->
+        <item>録音</item>
+        <!-- 30. Kazakh -->
+        <item>Жазу</item>
+        <!-- 31. Korean -->
+        <item>녹음</item>
+        <!-- 32. Latvian -->
+        <item>Ierakstīt</item>
+        <!-- 33. Lithuanian -->
+        <item>Įrašyti</item>
+        <!-- 34. Macedonian -->
+        <item>Сними</item>
+        <!-- 35. Mandarin (CN) -->
+        <item>录音</item>
+        <!-- 36. Mandarin (TW) -->
+        <item>錄音</item>
+        <!-- 37. Marathi -->
+        <item>रेकॉर्ड करा</item>
+        <!-- 38. Nepali -->
+        <item>रेकर्ड गर्नुहोस्</item>
+        <!-- 39. Nynorsk -->
+        <item>Ta opp</item>
+        <!-- 40. Persian -->
+        <item>ضبط</item>
+        <!-- 41. Polish -->
+        <item>Nagraj</item>
+        <!-- 42. Portuguese -->
+        <item>Gravar</item>
+        <!-- 43. Punjabi -->
+        <item>ਰਿਕਾਰਡ ਕਰੋ</item>
+        <!-- 44. Romanian -->
+        <item>Înregistrează</item>
+        <!-- 45. Russian -->
+        <item>Записать</item>
+        <!-- 46. Serbian -->
+        <item>Snimi</item>
+        <!-- 47. Slovak -->
+        <item>Nahrať</item>
+        <!-- 48. Slovenian -->
+        <item>Posnemi</item>
+        <!-- 49. Spanish -->
+        <item>Grabar</item>
+        <!-- 50. Swahili -->
+        <item>Rekodi</item>
+        <!-- 51. Swedish -->
+        <item>Spela in</item>
+        <!-- 52. Tamil -->
+        <item>பதிவு</item>
+        <!-- 53. Thai -->
+        <item>บันทึก</item>
+        <!-- 54. Turkish -->
+        <item>Kaydet</item>
+        <!-- 55. Ukrainian -->
+        <item>Записати</item>
+        <!-- 56. Urdu -->
+        <item>ریکار্ড کریں</item>
+        <!-- 57. Vietnamese -->
+        <item>Ghi âm</item>
+        <!-- 58. Welsh -->
+        <item>Recordio</item>
+    </string-array>
+
+    <string-array name="dictate_default_input_languages">
+        <item>detect</item>
+        <item>en</item>
+    </string-array>
+
+    <string-array name="dictate_api_providers">
+        <item>OpenAI</item>
+        <item>Groq</item>
+        <item>@string/dictate_custom_provider</item>
+    </string-array>
+    <string-array name="dictate_api_providers_values">
+        <item>https://api.openai.com/v1/</item>
+        <item>https://api.groq.com/openai/v1/</item>
+        <item>custom_server</item>
+    </string-array>
+
+    <string-array name="dictate_transcription_models_openai">
+        <item>GPT-4o mini transcribe (0.18 $ / h)</item>
+        <item>GPT-4o transcribe (0.36 $ / h)</item>
+        <item>Whisper V2 (0.36 $ / h)</item>
+    </string-array>
+    <string-array name="dictate_transcription_models_openai_values">
+        <item>gpt-4o-mini-transcribe</item>
+        <item>gpt-4o-transcribe</item>
+        <item>whisper-1</item>
+    </string-array>
+
+    <string-array name="dictate_transcription_models_groq">
+        <item>Whisper Large V3 Turbo (0.04 $ / h)</item>
+        <item>Whisper Large V3 (0.111 $ / h)</item>
+    </string-array>
+    <string-array name="dictate_transcription_models_groq_values">
+        <item>whisper-large-v3-turbo</item>
+        <item>whisper-large-v3</item>
+    </string-array>
+
+    <string-array name="dictate_rewording_models_openai">
+        <item>OpenAI o4 mini ($1.10 / $4.40 / 1M)</item>
+        <item>OpenAI o3 mini ($1.10 / $4.40 / 1M)</item>
+        <item>OpenAI o1 ($15.00 / $60.00 / 1M)</item>
+        <item>OpenAI o1 mini ($1.10 / $4.40 / 1M)</item>
+        <item>GPT-5.2 ($1.75 / $14.00 / 1M)</item>
+        <item>GPT-4o ($2.50 / $10.00 / 1M)</item>
+        <item>GPT-4o mini ($0.15 / $0.60 / 1M)</item>
+    </string-array>
+    <string-array name="dictate_rewording_models_openai_values">
+        <item>o4-mini</item>
+        <item>o3-mini</item>
+        <item>o1</item>
+        <item>o1-mini</item>
+        <item>gpt-5.2</item>
+        <item>gpt-4o</item>
+        <item>gpt-4o-mini</item>
+    </string-array>
+
+    <string-array name="dictate_rewording_models_groq">
+        <item>LLaMA 3.1 8B Instant</item>
+        <item>LLaMA 3.3 70B Versatile</item>
+        <item>LLaMA Guard 4 12B</item>
+        <item>GPT-OSS 120B</item>
+        <item>GPT-OSS 20B</item>
+    </string-array>
+    <string-array name="dictate_rewording_models_groq_values">
+        <item>llama-3.1-8b-instant</item>
+        <item>llama-3.3-70b-versatile</item>
+        <item>meta-llama/llama-guard-4-12b</item>
+        <item>openai/gpt-oss-120b</item>
+        <item>openai/gpt-oss-20b</item>
+    </string-array>
+    
+    <string-array name="dictate_theme_entries">
+        <item>System</item>
+        <item>@string/dictate_light</item>
+        <item>@string/dictate_dark</item>
+    </string-array>
+    <string-array name="dictate_theme_values">
+        <item>system</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
+</resources>
