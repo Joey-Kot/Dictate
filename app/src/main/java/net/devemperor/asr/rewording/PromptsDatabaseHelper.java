@@ -1,4 +1,4 @@
-package net.devemperor.dictate.rewording;
+package net.devemperor.asr.rewording;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -8,7 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 import androidx.annotation.Nullable;
 
-import net.devemperor.dictate.R;
+import net.devemperor.asr.R;
 
 import java.util.ArrayList;
 import java.util.List;

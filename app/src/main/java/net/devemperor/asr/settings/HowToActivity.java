@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 import android.os.Bundle;
 import android.widget.ExpandableListView;
@@ -10,8 +10,8 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import net.devemperor.dictate.DictateUtils;
-import net.devemperor.dictate.R;
+import net.devemperor.asr.DictateUtils;
+import net.devemperor.asr.R;
 
 import java.io.BufferedReader;
 import java.io.IOException;

@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 public class HowToItem {
     private final String text;

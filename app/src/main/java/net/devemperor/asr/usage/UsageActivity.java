@@ -1,4 +1,4 @@
-package net.devemperor.dictate.usage;
+package net.devemperor.asr.usage;
 
 import android.annotation.SuppressLint;
 import android.os.Bundle;
@@ -20,7 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import net.devemperor.dictate.R;
+import net.devemperor.asr.R;
 
 import java.util.List;
 

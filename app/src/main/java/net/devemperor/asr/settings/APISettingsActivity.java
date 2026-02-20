@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -18,8 +18,8 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import net.devemperor.dictate.R;
-import net.devemperor.dictate.SimpleTextWatcher;
+import net.devemperor.asr.R;
+import net.devemperor.asr.SimpleTextWatcher;
 
 import java.util.stream.IntStream;
 
@@ -87,7 +87,7 @@ public class APISettingsActivity extends AppCompatActivity {
             actionBar.setTitle(R.string.dictate_api_settings);
         }
 
-        sp = getSharedPreferences("net.devemperor.dictate", MODE_PRIVATE);
+        sp = getSharedPreferences("net.devemperor.asr", MODE_PRIVATE);
         transcriptionProviderSpn = findViewById(R.id.api_settings_transcription_provider_spn);
         transcriptionModelSpn = findViewById(R.id.api_settings_transcription_model_spn);
         transcriptionAPIKeyEt = findViewById(R.id.api_settings_transcription_api_key_et);
@@ -103,17 +103,17 @@ public class APISettingsActivity extends AppCompatActivity {
 
 
         // CONFIGURE TRANSCRIPTION API SETTINGS
-        transcriptionProvider = sp.getInt("net.devemperor.dictate.transcription_provider", 0);
-        transcriptionOpenAIModel = sp.getString("net.devemperor.dictate.transcription_openai_model", sp.getString("net.devemperor.dictate.transcription_model", "gpt-4o-mini-transcribe"));
-        transcriptionGroqModel = sp.getString("net.devemperor.dictate.transcription_groq_model", "whisper-large-v3-turbo");
-        transcriptionCustomHost = sp.getString("net.devemperor.dictate.transcription_custom_host", "");
-        transcriptionCustomModel = sp.getString("net.devemperor.dictate.transcription_custom_model", "");
+        transcriptionProvider = sp.getInt("net.devemperor.asr.transcription_provider", 0);
+        transcriptionOpenAIModel = sp.getString("net.devemperor.asr.transcription_openai_model", sp.getString("net.devemperor.asr.transcription_model", "gpt-4o-mini-transcribe"));
+        transcriptionGroqModel = sp.getString("net.devemperor.asr.transcription_groq_model", "whisper-large-v3-turbo");
+        transcriptionCustomHost = sp.getString("net.devemperor.asr.transcription_custom_host", "");
+        transcriptionCustomModel = sp.getString("net.devemperor.asr.transcription_custom_model", "");
 
         // Load specific API keys
-        String oldTranscriptionKey = sp.getString("net.devemperor.dictate.transcription_api_key", sp.getString("net.devemperor.dictate.api_key", ""));
-        transcriptionAPIKeyOpenAI = sp.getString("net.devemperor.dictate.transcription_api_key_openai", transcriptionProvider == 0 ? oldTranscriptionKey : "");
-        transcriptionAPIKeyGroq = sp.getString("net.devemperor.dictate.transcription_api_key_groq", transcriptionProvider == 1 ? oldTranscriptionKey : "");
-        transcriptionAPIKeyCustom = sp.getString("net.devemperor.dictate.transcription_api_key_custom", transcriptionProvider == 2 ? oldTranscriptionKey : "");
+        String oldTranscriptionKey = sp.getString("net.devemperor.asr.transcription_api_key", sp.getString("net.devemperor.asr.api_key", ""));
+        transcriptionAPIKeyOpenAI = sp.getString("net.devemperor.asr.transcription_api_key_openai", transcriptionProvider == 0 ? oldTranscriptionKey : "");
+        transcriptionAPIKeyGroq = sp.getString("net.devemperor.asr.transcription_api_key_groq", transcriptionProvider == 1 ? oldTranscriptionKey : "");
+        transcriptionAPIKeyCustom = sp.getString("net.devemperor.asr.transcription_api_key_custom", transcriptionProvider == 2 ? oldTranscriptionKey : "");
 
         transcriptionModelOpenAIAdapter = ArrayAdapter.createFromResource(this, R.array.dictate_transcription_models_openai, android.R.layout.simple_spinner_item);
         transcriptionModelOpenAIAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -127,7 +127,7 @@ public class APISettingsActivity extends AppCompatActivity {
         transcriptionProviderSpn.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                sp.edit().putInt("net.devemperor.dictate.transcription_provider", position).apply();
+                sp.edit().putInt("net.devemperor.asr.transcription_provider", position).apply();
                 transcriptionProvider = position;
                 updateTranscriptionModels(position);
             }
@@ -140,17 +140,17 @@ public class APISettingsActivity extends AppCompatActivity {
             public void afterTextChanged(Editable editable) {
                 if (ignoreTextChange) return;
                 String newKey = editable.toString();
-                sp.edit().putString("net.devemperor.dictate.transcription_api_key", newKey).apply();
+                sp.edit().putString("net.devemperor.asr.transcription_api_key", newKey).apply();
 
                 if (transcriptionProvider == 0) {
                     transcriptionAPIKeyOpenAI = newKey;
-                    sp.edit().putString("net.devemperor.dictate.transcription_api_key_openai", newKey).apply();
+                    sp.edit().putString("net.devemperor.asr.transcription_api_key_openai", newKey).apply();
                 } else if (transcriptionProvider == 1) {
                     transcriptionAPIKeyGroq = newKey;
-                    sp.edit().putString("net.devemperor.dictate.transcription_api_key_groq", newKey).apply();
+                    sp.edit().putString("net.devemperor.asr.transcription_api_key_groq", newKey).apply();
                 } else {
                     transcriptionAPIKeyCustom = newKey;
-                    sp.edit().putString("net.devemperor.dictate.transcription_api_key_custom", newKey).apply();
+                    sp.edit().putString("net.devemperor.asr.transcription_api_key_custom", newKey).apply();
                 }
             }
         });
@@ -164,11 +164,11 @@ public class APISettingsActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (transcriptionProvider == 0) {
                     String model = getResources().getStringArray(R.array.dictate_transcription_models_openai_values)[position];
-                    sp.edit().putString("net.devemperor.dictate.transcription_openai_model", model).apply();
+                    sp.edit().putString("net.devemperor.asr.transcription_openai_model", model).apply();
                     transcriptionOpenAIModel = model;
                 } else {
                     String model = getResources().getStringArray(R.array.dictate_transcription_models_groq_values)[position];
-                    sp.edit().putString("net.devemperor.dictate.transcription_groq_model", model).apply();
+                    sp.edit().putString("net.devemperor.asr.transcription_groq_model", model).apply();
                     transcriptionGroqModel = model;
                 }
             }
@@ -180,7 +180,7 @@ public class APISettingsActivity extends AppCompatActivity {
         transcriptionCustomHostEt.addTextChangedListener(new SimpleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                sp.edit().putString("net.devemperor.dictate.transcription_custom_host", editable.toString()).apply();
+                sp.edit().putString("net.devemperor.asr.transcription_custom_host", editable.toString()).apply();
             }
         });
 
@@ -188,23 +188,23 @@ public class APISettingsActivity extends AppCompatActivity {
         transcriptionCustomModelEt.addTextChangedListener(new SimpleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                sp.edit().putString("net.devemperor.dictate.transcription_custom_model", editable.toString()).apply();
+                sp.edit().putString("net.devemperor.asr.transcription_custom_model", editable.toString()).apply();
             }
         });
 
 
         // CONFIGURE REWORDING API SETTINGS
-        rewordingProvider = sp.getInt("net.devemperor.dictate.rewording_provider", 0);
-        rewordingOpenAIModel = sp.getString("net.devemperor.dictate.rewording_openai_model", sp.getString("net.devemperor.dictate.rewording_model", "gpt-4o-mini"));
-        rewordingGroqModel = sp.getString("net.devemperor.dictate.rewording_groq_model", "llama-3.3-70b-versatile");
-        rewordingCustomHost = sp.getString("net.devemperor.dictate.rewording_custom_host", "");
-        rewordingCustomModel = sp.getString("net.devemperor.dictate.rewording_custom_model", "");
+        rewordingProvider = sp.getInt("net.devemperor.asr.rewording_provider", 0);
+        rewordingOpenAIModel = sp.getString("net.devemperor.asr.rewording_openai_model", sp.getString("net.devemperor.asr.rewording_model", "gpt-4o-mini"));
+        rewordingGroqModel = sp.getString("net.devemperor.asr.rewording_groq_model", "llama-3.3-70b-versatile");
+        rewordingCustomHost = sp.getString("net.devemperor.asr.rewording_custom_host", "");
+        rewordingCustomModel = sp.getString("net.devemperor.asr.rewording_custom_model", "");
 
         // Load specific API keys
-        String oldRewordingKey = sp.getString("net.devemperor.dictate.rewording_api_key", sp.getString("net.devemperor.dictate.api_key", ""));
-        rewordingAPIKeyOpenAI = sp.getString("net.devemperor.dictate.rewording_api_key_openai", rewordingProvider == 0 ? oldRewordingKey : "");
-        rewordingAPIKeyGroq = sp.getString("net.devemperor.dictate.rewording_api_key_groq", rewordingProvider == 1 ? oldRewordingKey : "");
-        rewordingAPIKeyCustom = sp.getString("net.devemperor.dictate.rewording_api_key_custom", rewordingProvider == 2 ? oldRewordingKey : "");
+        String oldRewordingKey = sp.getString("net.devemperor.asr.rewording_api_key", sp.getString("net.devemperor.asr.api_key", ""));
+        rewordingAPIKeyOpenAI = sp.getString("net.devemperor.asr.rewording_api_key_openai", rewordingProvider == 0 ? oldRewordingKey : "");
+        rewordingAPIKeyGroq = sp.getString("net.devemperor.asr.rewording_api_key_groq", rewordingProvider == 1 ? oldRewordingKey : "");
+        rewordingAPIKeyCustom = sp.getString("net.devemperor.asr.rewording_api_key_custom", rewordingProvider == 2 ? oldRewordingKey : "");
 
         rewordingModelOpenAIAdapter = ArrayAdapter.createFromResource(this, R.array.dictate_rewording_models_openai, android.R.layout.simple_spinner_item);
         rewordingModelOpenAIAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -218,7 +218,7 @@ public class APISettingsActivity extends AppCompatActivity {
         rewordingProviderSpn.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                sp.edit().putInt("net.devemperor.dictate.rewording_provider", position).apply();
+                sp.edit().putInt("net.devemperor.asr.rewording_provider", position).apply();
                 rewordingProvider = position;
                 updateRewordingModels(position);
             }
@@ -231,17 +231,17 @@ public class APISettingsActivity extends AppCompatActivity {
             public void afterTextChanged(Editable editable) {
                 if (ignoreTextChange) return;
                 String newKey = editable.toString();
-                sp.edit().putString("net.devemperor.dictate.rewording_api_key", newKey).apply();
+                sp.edit().putString("net.devemperor.asr.rewording_api_key", newKey).apply();
 
                 if (rewordingProvider == 0) {
                     rewordingAPIKeyOpenAI = newKey;
-                    sp.edit().putString("net.devemperor.dictate.rewording_api_key_openai", newKey).apply();
+                    sp.edit().putString("net.devemperor.asr.rewording_api_key_openai", newKey).apply();
                 } else if (rewordingProvider == 1) {
                     rewordingAPIKeyGroq = newKey;
-                    sp.edit().putString("net.devemperor.dictate.rewording_api_key_groq", newKey).apply();
+                    sp.edit().putString("net.devemperor.asr.rewording_api_key_groq", newKey).apply();
                 } else {
                     rewordingAPIKeyCustom = newKey;
-                    sp.edit().putString("net.devemperor.dictate.rewording_api_key_custom", newKey).apply();
+                    sp.edit().putString("net.devemperor.asr.rewording_api_key_custom", newKey).apply();
                 }
             }
         });
@@ -255,11 +255,11 @@ public class APISettingsActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (rewordingProvider == 0) {
                     String model = getResources().getStringArray(R.array.dictate_rewording_models_openai_values)[position];
-                    sp.edit().putString("net.devemperor.dictate.rewording_openai_model", model).apply();
+                    sp.edit().putString("net.devemperor.asr.rewording_openai_model", model).apply();
                     rewordingOpenAIModel = model;
                 } else {
                     String model = getResources().getStringArray(R.array.dictate_rewording_models_groq_values)[position];
-                    sp.edit().putString("net.devemperor.dictate.rewording_groq_model", model).apply();
+                    sp.edit().putString("net.devemperor.asr.rewording_groq_model", model).apply();
                     rewordingGroqModel = model;
                 }
             }
@@ -271,7 +271,7 @@ public class APISettingsActivity extends AppCompatActivity {
         rewordingCustomHostEt.addTextChangedListener(new SimpleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                sp.edit().putString("net.devemperor.dictate.rewording_custom_host", editable.toString()).apply();
+                sp.edit().putString("net.devemperor.asr.rewording_custom_host", editable.toString()).apply();
             }
         });
 
@@ -279,7 +279,7 @@ public class APISettingsActivity extends AppCompatActivity {
         rewordingCustomModelEt.addTextChangedListener(new SimpleTextWatcher() {
             @Override
             public void afterTextChanged(Editable editable) {
-                sp.edit().putString("net.devemperor.dictate.rewording_custom_model", editable.toString()).apply();
+                sp.edit().putString("net.devemperor.asr.rewording_custom_model", editable.toString()).apply();
             }
         });
     }
@@ -312,7 +312,7 @@ public class APISettingsActivity extends AppCompatActivity {
         }
 
         // Ensure generic key is updated to match current provider's key
-        sp.edit().putString("net.devemperor.dictate.transcription_api_key", transcriptionAPIKeyEt.getText().toString()).apply();
+        sp.edit().putString("net.devemperor.asr.transcription_api_key", transcriptionAPIKeyEt.getText().toString()).apply();
         ignoreTextChange = false;
     }
 
@@ -344,7 +344,7 @@ public class APISettingsActivity extends AppCompatActivity {
         }
 
         // Ensure generic key is updated to match current provider's key
-        sp.edit().putString("net.devemperor.dictate.rewording_api_key", rewordingAPIKeyEt.getText().toString()).apply();
+        sp.edit().putString("net.devemperor.asr.rewording_api_key", rewordingAPIKeyEt.getText().toString()).apply();
         ignoreTextChange = false;
     }
 

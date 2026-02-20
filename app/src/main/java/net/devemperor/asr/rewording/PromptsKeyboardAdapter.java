@@ -1,4 +1,4 @@
-package net.devemperor.dictate.rewording;
+package net.devemperor.asr.rewording;
 
 import android.animation.TimeInterpolator;
 import android.annotation.SuppressLint;
@@ -15,8 +15,8 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
 
-import net.devemperor.dictate.DictateUtils;
-import net.devemperor.dictate.R;
+import net.devemperor.asr.DictateUtils;
+import net.devemperor.asr.R;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -134,7 +134,7 @@ public class PromptsKeyboardAdapter extends RecyclerView.Adapter<PromptsKeyboard
             callback.onItemLongClicked(position);
             return true;
         });
-        int accentColor = sp.getInt("net.devemperor.dictate.accent_color", -14700810);
+        int accentColor = sp.getInt("net.devemperor.asr.accent_color", -14700810);
         int accentColorMedium = DictateUtils.darkenColor(accentColor, 0.18f);
         int accentColorDark = DictateUtils.darkenColor(accentColor, 0.35f);
         int backgroundColor;
@@ -146,7 +146,7 @@ public class PromptsKeyboardAdapter extends RecyclerView.Adapter<PromptsKeyboard
             backgroundColor = accentColorMedium;
         }
         applyPromptButtonColors(holder.promptBtn, backgroundColor);
-        if (sp.getBoolean("net.devemperor.dictate.animations", true)) {
+        if (sp.getBoolean("net.devemperor.asr.animations", true)) {
             holder.promptBtn.setOnTouchListener((v, event) -> {
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:

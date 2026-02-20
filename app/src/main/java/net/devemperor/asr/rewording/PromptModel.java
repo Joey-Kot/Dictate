@@ -1,4 +1,4 @@
-package net.devemperor.dictate.rewording;
+package net.devemperor.asr.rewording;
 
 public class PromptModel {
     int id;

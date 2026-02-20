@@ -1,4 +1,4 @@
-package net.devemperor.dictate.usage;
+package net.devemperor.asr.usage;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 
 import androidx.annotation.Nullable;
 
-import net.devemperor.dictate.DictateUtils;
+import net.devemperor.asr.DictateUtils;
 
 import java.util.ArrayList;
 import java.util.List;

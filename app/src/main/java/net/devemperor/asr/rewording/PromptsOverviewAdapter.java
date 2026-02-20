@@ -1,4 +1,4 @@
-package net.devemperor.dictate.rewording;
+package net.devemperor.asr.rewording;
 
 import android.content.res.ColorStateList;
 import android.view.LayoutInflater;
@@ -15,7 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import net.devemperor.dictate.R;
+import net.devemperor.asr.R;
 
 import java.util.List;
 

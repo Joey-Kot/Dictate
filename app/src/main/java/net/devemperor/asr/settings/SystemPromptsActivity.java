@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -19,8 +19,8 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import net.devemperor.dictate.R;
-import net.devemperor.dictate.SimpleTextWatcher;
+import net.devemperor.asr.R;
+import net.devemperor.asr.SimpleTextWatcher;
 
 public class SystemPromptsActivity extends AppCompatActivity {
 
@@ -55,7 +55,7 @@ public class SystemPromptsActivity extends AppCompatActivity {
             actionBar.setTitle(R.string.dictate_system_prompts);
         }
 
-        sp = getSharedPreferences("net.devemperor.dictate", MODE_PRIVATE);
+        sp = getSharedPreferences("net.devemperor.asr", MODE_PRIVATE);
 
         transcriptionStylePromptRg = findViewById(R.id.transcription_style_prompt_rg);
         transcriptionStylePromptNothingRb = findViewById(R.id.transcription_style_prompt_nothing_rb);
@@ -80,8 +80,8 @@ public class SystemPromptsActivity extends AppCompatActivity {
     }
 
     private void setupTranscriptionStylePrompt() {
-        changeTranscriptionSelection(sp.getInt("net.devemperor.dictate.style_prompt_selection", 1));
-        transcriptionStylePromptCustomEt.setText(sp.getString("net.devemperor.dictate.style_prompt_custom_text", ""));
+        changeTranscriptionSelection(sp.getInt("net.devemperor.asr.style_prompt_selection", 1));
+        transcriptionStylePromptCustomEt.setText(sp.getString("net.devemperor.asr.style_prompt_custom_text", ""));
 
         transcriptionStylePromptRg.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.transcription_style_prompt_nothing_rb) {
@@ -96,14 +96,14 @@ public class SystemPromptsActivity extends AppCompatActivity {
         transcriptionStylePromptCustomEt.addTextChangedListener(new SimpleTextWatcher() {
             @Override
             public void afterTextChanged(Editable s) {
-                sp.edit().putString("net.devemperor.dictate.style_prompt_custom_text", s.toString()).apply();
+                sp.edit().putString("net.devemperor.asr.style_prompt_custom_text", s.toString()).apply();
             }
         });
     }
 
     private void setupRewordingSystemPrompt() {
-        changeRewordingSelection(sp.getInt("net.devemperor.dictate.system_prompt_selection", 1));
-        rewordingSystemPromptCustomEt.setText(sp.getString("net.devemperor.dictate.system_prompt_custom_text", ""));
+        changeRewordingSelection(sp.getInt("net.devemperor.asr.system_prompt_selection", 1));
+        rewordingSystemPromptCustomEt.setText(sp.getString("net.devemperor.asr.system_prompt_custom_text", ""));
 
         rewordingSystemPromptRg.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.rewording_system_prompt_nothing_rb) {
@@ -118,7 +118,7 @@ public class SystemPromptsActivity extends AppCompatActivity {
         rewordingSystemPromptCustomEt.addTextChangedListener(new SimpleTextWatcher() {
             @Override
             public void afterTextChanged(Editable s) {
-                sp.edit().putString("net.devemperor.dictate.system_prompt_custom_text", s.toString()).apply();
+                sp.edit().putString("net.devemperor.asr.system_prompt_custom_text", s.toString()).apply();
             }
         });
     }
@@ -137,7 +137,7 @@ public class SystemPromptsActivity extends AppCompatActivity {
         transcriptionStylePromptPredefinedRb.setChecked(selection == 1);
         transcriptionStylePromptCustomRb.setChecked(selection == 2);
         transcriptionStylePromptCustomEt.setEnabled(selection == 2);
-        sp.edit().putInt("net.devemperor.dictate.style_prompt_selection", selection).apply();
+        sp.edit().putInt("net.devemperor.asr.style_prompt_selection", selection).apply();
     }
 
     private void changeRewordingSelection(int selection) {
@@ -145,6 +145,6 @@ public class SystemPromptsActivity extends AppCompatActivity {
         rewordingSystemPromptPredefinedRb.setChecked(selection == 1);
         rewordingSystemPromptCustomRb.setChecked(selection == 2);
         rewordingSystemPromptCustomEt.setEnabled(selection == 2);
-        sp.edit().putInt("net.devemperor.dictate.system_prompt_selection", selection).apply();
+        sp.edit().putInt("net.devemperor.asr.system_prompt_selection", selection).apply();
     }
 }

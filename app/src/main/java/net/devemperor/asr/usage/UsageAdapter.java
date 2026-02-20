@@ -1,4 +1,4 @@
-package net.devemperor.dictate.usage;
+package net.devemperor.asr.usage;
 
 import android.annotation.SuppressLint;
 import android.view.LayoutInflater;
@@ -11,8 +11,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.RecyclerView;
 
-import net.devemperor.dictate.DictateUtils;
-import net.devemperor.dictate.R;
+import net.devemperor.asr.DictateUtils;
+import net.devemperor.asr.R;
 
 import java.util.List;
 

@@ -12,7 +12,7 @@
 <table>
   <tr>
     <td>
-      <a href='https://play.google.com/store/apps/details?id=net.devemperor.dictate'>
+      <a href='https://play.google.com/store/apps/details?id=net.devemperor.asr'>
         <img alt='Get it on Google Play' width="300px" src='https://github.com/DevEmperor/Dictate/blob/d99981575350cfde1fa91d4c449d97483eda14d0/img/google-play-badge.png?raw=true'/>
       </a>
     </td>
@@ -36,7 +36,7 @@
 
 ## Installation
 
-**The app is available on [Google Play](https://play.google.com/store/apps/details?id=net.devemperor.dictate)** (for a small fee to support me and the future development), so you get easy installation and free lifetime updates. Just click on the badge above or [on this link](https://play.google.com/store/apps/details?id=net.devemperor.dictate).
+**The app is available on [Google Play](https://play.google.com/store/apps/details?id=net.devemperor.asr)** (for a small fee to support me and the future development), so you get easy installation and free lifetime updates. Just click on the badge above or [on this link](https://play.google.com/store/apps/details?id=net.devemperor.asr).
 
 ## Development
 

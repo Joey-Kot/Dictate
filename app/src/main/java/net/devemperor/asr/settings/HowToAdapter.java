@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 import android.content.Context;
 import android.view.LayoutInflater;
@@ -8,7 +8,7 @@ import android.widget.BaseExpandableListAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import net.devemperor.dictate.R;
+import net.devemperor.asr.R;
 
 import java.util.HashMap;
 import java.util.List;

@@ -1,4 +1,4 @@
-package net.devemperor.dictate.rewording;
+package net.devemperor.asr.rewording;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
@@ -22,7 +22,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import net.devemperor.dictate.R;
+import net.devemperor.asr.R;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -76,7 +76,7 @@ public class PromptsOverviewActivity extends AppCompatActivity {
             PromptModel model = data.get(position);
 
             Intent intent = new Intent(this, PromptEditActivity.class);
-            intent.putExtra("net.devemperor.dictate.prompt_edit_activity_id", model.getId());
+            intent.putExtra("net.devemperor.asr.prompt_edit_activity_id", model.getId());
             addEditPromptLauncher.launch(intent);
         });
         recyclerView.setAdapter(adapter);

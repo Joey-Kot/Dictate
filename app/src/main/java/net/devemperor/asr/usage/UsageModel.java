@@ -1,4 +1,4 @@
-package net.devemperor.dictate.usage;
+package net.devemperor.asr.usage;
 
 public class UsageModel {
     private final String modelName;

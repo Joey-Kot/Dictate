@@ -1,4 +1,4 @@
-package net.devemperor.dictate;
+package net.devemperor.asr;
 
 import android.text.TextWatcher;
 

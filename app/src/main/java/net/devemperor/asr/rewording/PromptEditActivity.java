@@ -1,4 +1,4 @@
-package net.devemperor.dictate.rewording;
+package net.devemperor.asr.rewording;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -16,8 +16,8 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
-import net.devemperor.dictate.R;
-import net.devemperor.dictate.SimpleTextWatcher;
+import net.devemperor.asr.R;
+import net.devemperor.asr.SimpleTextWatcher;
 
 public class PromptEditActivity extends AppCompatActivity {
 
@@ -59,7 +59,7 @@ public class PromptEditActivity extends AppCompatActivity {
 
         db = new PromptsDatabaseHelper(this);
 
-        promptId = getIntent().getIntExtra("net.devemperor.dictate.prompt_edit_activity_id", -1);
+        promptId = getIntent().getIntExtra("net.devemperor.asr.prompt_edit_activity_id", -1);
         if (promptId != -1) {
             PromptModel model = db.get(promptId);
             if (model != null) {

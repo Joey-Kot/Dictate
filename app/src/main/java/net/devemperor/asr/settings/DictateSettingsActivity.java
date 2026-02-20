@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 import android.Manifest;
 import android.content.Context;
@@ -26,9 +26,9 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import net.devemperor.dictate.BuildConfig;
-import net.devemperor.dictate.onboarding.OnboardingActivity;
-import net.devemperor.dictate.R;
+import net.devemperor.asr.BuildConfig;
+import net.devemperor.asr.onboarding.OnboardingActivity;
+import net.devemperor.asr.R;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -56,15 +56,15 @@ public class DictateSettingsActivity extends AppCompatActivity {
                 .replace(R.id.activity_dictate_settings, new PreferencesFragment())
                 .commit();
 
-        SharedPreferences sp = getSharedPreferences("net.devemperor.dictate", MODE_PRIVATE);
+        SharedPreferences sp = getSharedPreferences("net.devemperor.asr", MODE_PRIVATE);
 
         // start onboarding if this is the first time for the user to open Dictate
-        if (!sp.getBoolean("net.devemperor.dictate.onboarding_complete", false)) {
+        if (!sp.getBoolean("net.devemperor.asr.onboarding_complete", false)) {
             startActivity(new Intent(this, OnboardingActivity.class));
             finish();
 
         // open file picker if user wants to transcribe a file
-        } else if (getIntent().getBooleanExtra("net.devemperor.dictate.open_file_picker", false)) {
+        } else if (getIntent().getBooleanExtra("net.devemperor.asr.open_file_picker", false)) {
             filePickerLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                     if (result.getResultCode() == RESULT_OK) {
                         if (result.getData() != null) {
@@ -112,7 +112,7 @@ public class DictateSettingsActivity extends AppCompatActivity {
                                 throw new RuntimeException(e);
                             }
 
-                            sp.edit().putString("net.devemperor.dictate.transcription_audio_file", fileName).apply();
+                            sp.edit().putString("net.devemperor.asr.transcription_audio_file", fileName).apply();
                         }
                     }
                     finish();  // close the activity after the file has been picked
@@ -128,11 +128,11 @@ public class DictateSettingsActivity extends AppCompatActivity {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             filePickerLauncher.launch(Intent.createChooser(intent, getString(R.string.dictate_choose_audio_file)));
 
-        } else if (sp.getInt("net.devemperor.dictate.last_version_code", 0) < BuildConfig.VERSION_CODE) {
+        } else if (sp.getInt("net.devemperor.asr.last_version_code", 0) < BuildConfig.VERSION_CODE) {
 
             // show changelog if user has a new version
             StringBuilder whatsNewMessage = new StringBuilder(getString(R.string.dictate_changelog_donate));
-            int lastVersionCode = sp.getInt("net.devemperor.dictate.last_version_code", 0);
+            int lastVersionCode = sp.getInt("net.devemperor.asr.last_version_code", 0);
             for (int version = BuildConfig.VERSION_CODE; version >= 5; version--) {
                 if (lastVersionCode < version) {
                     int resId = getResources().getIdentifier("dictate_changelog_" + version, "string", getPackageName());
@@ -142,10 +142,10 @@ public class DictateSettingsActivity extends AppCompatActivity {
             new MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.dictate_whats_new)
                     .setMessage(whatsNewMessage.toString())
-                    .setPositiveButton(R.string.dictate_okay, (di, i) -> sp.edit().putInt("net.devemperor.dictate.last_version_code", BuildConfig.VERSION_CODE).apply())
+                    .setPositiveButton(R.string.dictate_okay, (di, i) -> sp.edit().putInt("net.devemperor.asr.last_version_code", BuildConfig.VERSION_CODE).apply())
                     .show();
 
-            if (lastVersionCode <= 26) sp.edit().putBoolean("net.devemperor.dictate.use_bluetooth_mic", false).apply();  // reset bluetooth mic setting to false due to issues in 2.10.0
+            if (lastVersionCode <= 26) sp.edit().putBoolean("net.devemperor.asr.use_bluetooth_mic", false).apply();  // reset bluetooth mic setting to false due to issues in 2.10.0
 
         } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{ Manifest.permission.RECORD_AUDIO }, 1337);

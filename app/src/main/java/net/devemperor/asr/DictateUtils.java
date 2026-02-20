@@ -1,4 +1,4 @@
-package net.devemperor.dictate;
+package net.devemperor.asr;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -128,8 +128,8 @@ public class DictateUtils {
     }
 
     public static void applyApplicationLocale(Context context) {
-        SharedPreferences sp = context.getSharedPreferences("net.devemperor.dictate", Context.MODE_PRIVATE);
-        String language = sp.getString("net.devemperor.dictate.app_language", "system");
+        SharedPreferences sp = context.getSharedPreferences("net.devemperor.asr", Context.MODE_PRIVATE);
+        String language = sp.getString("net.devemperor.asr.app_language", "system");
         applyApplicationLocale(language);
     }
 
@@ -308,8 +308,8 @@ public class DictateUtils {
     }
 
     public static void applyProxy(OpenAIOkHttpClient.Builder clientBuilder, SharedPreferences sp) {
-        String proxyInput = sp.getString("net.devemperor.dictate.proxy_host", "");
-        boolean proxyEnabled = sp.getBoolean("net.devemperor.dictate.proxy_enabled", false);
+        String proxyInput = sp.getString("net.devemperor.asr.proxy_host", "");
+        boolean proxyEnabled = sp.getBoolean("net.devemperor.asr.proxy_enabled", false);
 
         if (!proxyEnabled || proxyInput.isEmpty()) return;
 

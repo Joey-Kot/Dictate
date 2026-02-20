@@ -1,4 +1,4 @@
-package net.devemperor.dictate.settings;
+package net.devemperor.asr.settings;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -19,12 +19,12 @@ import androidx.preference.SwitchPreference;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import net.devemperor.dictate.BuildConfig;
-import net.devemperor.dictate.DictateUtils;
-import net.devemperor.dictate.R;
-import net.devemperor.dictate.rewording.PromptsOverviewActivity;
-import net.devemperor.dictate.usage.UsageActivity;
-import net.devemperor.dictate.usage.UsageDatabaseHelper;
+import net.devemperor.asr.BuildConfig;
+import net.devemperor.asr.DictateUtils;
+import net.devemperor.asr.R;
+import net.devemperor.asr.rewording.PromptsOverviewActivity;
+import net.devemperor.asr.usage.UsageActivity;
+import net.devemperor.asr.usage.UsageDatabaseHelper;
 
 import java.io.File;
 import java.util.Arrays;
@@ -38,12 +38,12 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-        getPreferenceManager().setSharedPreferencesName("net.devemperor.dictate");
+        getPreferenceManager().setSharedPreferencesName("net.devemperor.asr");
         setPreferencesFromResource(R.xml.fragment_preferences, null);
         sp = getPreferenceManager().getSharedPreferences();
         usageDatabaseHelper = new UsageDatabaseHelper(requireContext());
 
-        Preference editPromptsPreference = findPreference("net.devemperor.dictate.edit_custom_rewording_prompts");
+        Preference editPromptsPreference = findPreference("net.devemperor.asr.edit_custom_rewording_prompts");
         if (editPromptsPreference != null) {
             editPromptsPreference.setOnPreferenceClickListener(preference -> {
                 startActivity(new Intent(requireContext(), PromptsOverviewActivity.class));
@@ -51,7 +51,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        MultiSelectListPreference inputLanguagesPreference = findPreference("net.devemperor.dictate.input_languages");
+        MultiSelectListPreference inputLanguagesPreference = findPreference("net.devemperor.asr.input_languages");
         if (inputLanguagesPreference != null) {
             inputLanguagesPreference.setSummaryProvider((Preference.SummaryProvider<MultiSelectListPreference>) preference -> {
                 String[] selectedLanguagesValues = preference.getValues().toArray(new String[0]);
@@ -64,12 +64,12 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
                     Toast.makeText(requireContext(), R.string.dictate_input_languages_empty, Toast.LENGTH_SHORT).show();
                     return false;
                 }
-                sp.edit().putInt("net.devemperor.dictate.input_language_pos", 0).apply();
+                sp.edit().putInt("net.devemperor.asr.input_language_pos", 0).apply();
                 return true;
             });
         }
 
-        ListPreference appLanguagePreference = findPreference("net.devemperor.dictate.app_language");
+        ListPreference appLanguagePreference = findPreference("net.devemperor.asr.app_language");
         if (appLanguagePreference != null) {
             appLanguagePreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 DictateUtils.applyApplicationLocale((String) newValue);
@@ -78,7 +78,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        EditTextPreference overlayCharactersPreference = findPreference("net.devemperor.dictate.overlay_characters");
+        EditTextPreference overlayCharactersPreference = findPreference("net.devemperor.asr.overlay_characters");
         if (overlayCharactersPreference != null) {
             overlayCharactersPreference.setSummaryProvider((Preference.SummaryProvider<EditTextPreference>) preference -> {
                 String text = preference.getText();
@@ -106,8 +106,8 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        SwitchPreference instantOutputPreference = findPreference("net.devemperor.dictate.instant_output");
-        SeekBarPreference outputSpeedPreference = findPreference("net.devemperor.dictate.output_speed");
+        SwitchPreference instantOutputPreference = findPreference("net.devemperor.asr.instant_output");
+        SeekBarPreference outputSpeedPreference = findPreference("net.devemperor.asr.output_speed");
         if (instantOutputPreference != null && outputSpeedPreference != null) {
             instantOutputPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 outputSpeedPreference.setEnabled(!(Boolean) newValue);
@@ -116,7 +116,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             outputSpeedPreference.setEnabled(!instantOutputPreference.isChecked());
         }
 
-        Preference usagePreference = findPreference("net.devemperor.dictate.usage");
+        Preference usagePreference = findPreference("net.devemperor.asr.usage");
         if (usagePreference != null) {
             usagePreference.setSummary(getString(R.string.dictate_usage_total_cost, usageDatabaseHelper.getTotalCost()));
 
@@ -128,7 +128,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        Preference apiSettingsPreference = findPreference("net.devemperor.dictate.api_settings");
+        Preference apiSettingsPreference = findPreference("net.devemperor.asr.api_settings");
         if (apiSettingsPreference != null) {
             apiSettingsPreference.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent(requireContext(), APISettingsActivity.class);
@@ -138,7 +138,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        Preference promptPreference = findPreference("net.devemperor.dictate.prompts");
+        Preference promptPreference = findPreference("net.devemperor.asr.prompts");
         if (promptPreference != null) {
             promptPreference.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent(requireContext(), SystemPromptsActivity.class);
@@ -148,7 +148,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        EditTextPreference proxyHostPreference = findPreference("net.devemperor.dictate.proxy_host");
+        EditTextPreference proxyHostPreference = findPreference("net.devemperor.asr.proxy_host");
         if (proxyHostPreference != null) {
             proxyHostPreference.setSummaryProvider((Preference.SummaryProvider<EditTextPreference>) preference -> {
                 String host = preference.getText();
@@ -176,7 +176,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        Preference howToPreference = findPreference("net.devemperor.dictate.how_to");
+        Preference howToPreference = findPreference("net.devemperor.asr.how_to");
         if (howToPreference != null) {
             howToPreference.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent(requireContext(), HowToActivity.class);
@@ -186,7 +186,7 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        Preference cachePreference = findPreference("net.devemperor.dictate.cache");
+        Preference cachePreference = findPreference("net.devemperor.asr.cache");
         File[] cacheFiles = requireContext().getCacheDir().listFiles();
         if (cachePreference != null) {
             if (cacheFiles != null) {
@@ -213,20 +213,20 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        Preference feedbackPreference = findPreference("net.devemperor.dictate.feedback");
+        Preference feedbackPreference = findPreference("net.devemperor.asr.feedback");
         if (feedbackPreference != null) {
             feedbackPreference.setOnPreferenceClickListener(preference -> {
                 Intent emailIntent = new Intent(Intent.ACTION_SENDTO);
                 emailIntent.setData(Uri.parse("mailto:contact@devemperor.net"));
                 emailIntent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.dictate_feedback_subject));
                 emailIntent.putExtra(Intent.EXTRA_TEXT, getString(R.string.dictate_feedback_body)
-                        + "\n\nDictate User-ID: " + sp.getString("net.devemperor.dictate.user_id", "null"));
+                        + "\n\nDictate User-ID: " + sp.getString("net.devemperor.asr.user_id", "null"));
                 startActivity(Intent.createChooser(emailIntent, getString(R.string.dictate_feedback_title)));
                 return true;
             });
         }
 
-        Preference githubPreference = findPreference("net.devemperor.dictate.github");
+        Preference githubPreference = findPreference("net.devemperor.asr.github");
         if (githubPreference != null) {
             githubPreference.setOnPreferenceClickListener(preference -> {
                 Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DevEmperor/Dictate"));
@@ -235,11 +235,11 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             });
         }
 
-        Preference aboutPreference = findPreference("net.devemperor.dictate.about");
+        Preference aboutPreference = findPreference("net.devemperor.asr.about");
         if (aboutPreference != null) {
             aboutPreference.setTitle(getString(R.string.dictate_about, BuildConfig.VERSION_NAME));
             aboutPreference.setOnPreferenceClickListener(preference -> {
-                Toast.makeText(requireContext(), "User-ID: " + sp.getString("net.devemperor.dictate.user_id", "null"), Toast.LENGTH_LONG).show();
+                Toast.makeText(requireContext(), "User-ID: " + sp.getString("net.devemperor.asr.user_id", "null"), Toast.LENGTH_LONG).show();
                 return true;
             });
         }

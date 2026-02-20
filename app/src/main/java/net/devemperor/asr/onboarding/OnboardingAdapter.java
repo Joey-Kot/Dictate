@@ -1,4 +1,4 @@
-package net.devemperor.dictate.onboarding;
+package net.devemperor.asr.onboarding;
 
 import android.app.Activity;
 import android.content.Context;
@@ -23,9 +23,9 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import net.devemperor.dictate.DictateUtils;
-import net.devemperor.dictate.R;
-import net.devemperor.dictate.settings.DictateSettingsActivity;
+import net.devemperor.asr.DictateUtils;
+import net.devemperor.asr.R;
+import net.devemperor.asr.settings.DictateSettingsActivity;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -126,16 +126,16 @@ public class OnboardingAdapter extends RecyclerView.Adapter<OnboardingAdapter.Vi
                     .setTitle(R.string.dictate_onboarding_complete_dialog_title)
                     .setMessage(R.string.dictate_onboarding_complete_dialog_message)
                     .setPositiveButton(R.string.dictate_okay, (dialog, which) -> {
-                        SharedPreferences sp = activity.getSharedPreferences("net.devemperor.dictate", Context.MODE_PRIVATE);
+                        SharedPreferences sp = activity.getSharedPreferences("net.devemperor.asr", Context.MODE_PRIVATE);
                         // if user decided to use Groq, switch to all Groq settings
                         if (apiKeyEt.getText().toString().startsWith("gsk_")) {
-                            sp.edit().putInt("net.devemperor.dictate.transcription_provider", 1).apply();
-                            sp.edit().putInt("net.devemperor.dictate.rewording_provider", 1).apply();
+                            sp.edit().putInt("net.devemperor.asr.transcription_provider", 1).apply();
+                            sp.edit().putInt("net.devemperor.asr.rewording_provider", 1).apply();
                         }
 
-                        sp.edit().putString("net.devemperor.dictate.transcription_api_key", apiKeyEt.getText().toString()).apply();
-                        sp.edit().putString("net.devemperor.dictate.rewording_api_key", apiKeyEt.getText().toString()).apply();
-                        sp.edit().putBoolean("net.devemperor.dictate.onboarding_complete", true).apply();
+                        sp.edit().putString("net.devemperor.asr.transcription_api_key", apiKeyEt.getText().toString()).apply();
+                        sp.edit().putString("net.devemperor.asr.rewording_api_key", apiKeyEt.getText().toString()).apply();
+                        sp.edit().putBoolean("net.devemperor.asr.onboarding_complete", true).apply();
                         activity.startActivity(new Intent(activity, DictateSettingsActivity.class));
                         activity.finish();
                     })

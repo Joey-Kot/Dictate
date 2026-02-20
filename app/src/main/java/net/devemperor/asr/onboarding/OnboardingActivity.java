@@ -1,4 +1,4 @@
-package net.devemperor.dictate.onboarding;
+package net.devemperor.asr.onboarding;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -17,7 +17,7 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
-import net.devemperor.dictate.R;
+import net.devemperor.asr.R;
 
 import java.util.List;
 

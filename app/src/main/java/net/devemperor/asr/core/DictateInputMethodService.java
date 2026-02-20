@@ -1,4 +1,4 @@
-package net.devemperor.dictate.core;
+package net.devemperor.asr.core;
 
 import android.Manifest;
 import android.animation.ObjectAnimator;
@@ -69,16 +69,16 @@ import com.openai.models.audio.transcriptions.TranscriptionCreateParams;
 import com.openai.models.chat.completions.ChatCompletion;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 
-import net.devemperor.dictate.BuildConfig;
-import net.devemperor.dictate.DictateUtils;
-import net.devemperor.dictate.R;
-import net.devemperor.dictate.rewording.PromptEditActivity;
-import net.devemperor.dictate.rewording.PromptModel;
-import net.devemperor.dictate.rewording.PromptsDatabaseHelper;
-import net.devemperor.dictate.rewording.PromptsKeyboardAdapter;
-import net.devemperor.dictate.rewording.PromptsOverviewActivity;
-import net.devemperor.dictate.settings.DictateSettingsActivity;
-import net.devemperor.dictate.usage.UsageDatabaseHelper;
+import net.devemperor.asr.BuildConfig;
+import net.devemperor.asr.DictateUtils;
+import net.devemperor.asr.R;
+import net.devemperor.asr.rewording.PromptEditActivity;
+import net.devemperor.asr.rewording.PromptModel;
+import net.devemperor.asr.rewording.PromptsDatabaseHelper;
+import net.devemperor.asr.rewording.PromptsKeyboardAdapter;
+import net.devemperor.asr.rewording.PromptsOverviewActivity;
+import net.devemperor.asr.settings.DictateSettingsActivity;
+import net.devemperor.asr.usage.UsageDatabaseHelper;
 
 import java.io.File;
 import java.io.IOException;
@@ -242,11 +242,11 @@ public class DictateInputMethodService extends InputMethodService {
         bluetoothHandler = new Handler(Looper.getMainLooper());
 
         vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-        sp = getSharedPreferences("net.devemperor.dictate", MODE_PRIVATE);
+        sp = getSharedPreferences("net.devemperor.asr", MODE_PRIVATE);
         promptsDb = new PromptsDatabaseHelper(this);
         usageDb = new UsageDatabaseHelper(this);
-        vibrationEnabled = sp.getBoolean("net.devemperor.dictate.vibration", true);
-        currentInputLanguagePos = sp.getInt("net.devemperor.dictate.input_language_pos", 0);
+        vibrationEnabled = sp.getBoolean("net.devemperor.asr.vibration", true);
+        currentInputLanguagePos = sp.getInt("net.devemperor.asr.input_language_pos", 0);
 
         dictateKeyboardView = (ConstraintLayout) LayoutInflater.from(context).inflate(R.layout.activity_dictate_keyboard_view, null);
         dictateKeyboardView.setKeepScreenOn(false);
@@ -303,8 +303,8 @@ public class DictateInputMethodService extends InputMethodService {
         promptsRv.setLayoutManager(promptsLayoutManager);
 
         // if user id is not set, set a random number as user id
-        if (sp.getString("net.devemperor.dictate.user_id", "null").equals("null")) {
-            sp.edit().putString("net.devemperor.dictate.user_id", String.valueOf((int) (Math.random() * 1000000))).apply();
+        if (sp.getString("net.devemperor.asr.user_id", "null").equals("null")) {
+            sp.edit().putString("net.devemperor.asr.user_id", String.valueOf((int) (Math.random() * 1000000))).apply();
         }
 
         recordTimeRunnable = new Runnable() {  // runnable to update the record button time text
@@ -360,7 +360,7 @@ public class DictateInputMethodService extends InputMethodService {
             if (!isRecording && !isPreparingRecording) {  // open real settings activity to start file picker
                 Intent intent = new Intent(this, DictateSettingsActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.putExtra("net.devemperor.dictate.open_file_picker", true);
+                intent.putExtra("net.devemperor.asr.open_file_picker", true);
                 startActivity(intent);
             } else if (!livePrompt && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {  // long press during recording automatically switches keyboard after transcription
                 autoSwitchKeyboard= true;
@@ -372,7 +372,7 @@ public class DictateInputMethodService extends InputMethodService {
         resendButton.setOnClickListener(v -> {
             vibrate();
             // if user clicked on resendButton without error before, audioFile is default audio
-            if (audioFile == null) audioFile = new File(getCacheDir(), sp.getString("net.devemperor.dictate.last_file_name", "audio.m4a"));
+            if (audioFile == null) audioFile = new File(getCacheDir(), sp.getString("net.devemperor.asr.last_file_name", "audio.m4a"));
             startWhisperApiRequest();
         });
 
@@ -554,8 +554,8 @@ public class DictateInputMethodService extends InputMethodService {
             if (isBluetoothScoStarted) am.stopBluetoothSco();
 
             // enable resend button if previous audio file still exists in cache
-            if (new File(getCacheDir(), sp.getString("net.devemperor.dictate.last_file_name", "audio.m4a")).exists()
-                    && sp.getBoolean("net.devemperor.dictate.resend_button", false)) {
+            if (new File(getCacheDir(), sp.getString("net.devemperor.asr.last_file_name", "audio.m4a")).exists()
+                    && sp.getBoolean("net.devemperor.asr.resend_button", false)) {
                 resendButton.setVisibility(View.VISIBLE);
             }
 
@@ -847,7 +847,7 @@ public class DictateInputMethodService extends InputMethodService {
         updateEnterButtonIcon(info);
         initAndRegisterBluetoothReceiver();
 
-        if (sp.getBoolean("net.devemperor.dictate.rewording_enabled", true)) {
+        if (sp.getBoolean("net.devemperor.asr.rewording_enabled", true)) {
             promptsCl.setVisibility(View.VISIBLE);
 
             // collect all prompts from database
@@ -910,7 +910,7 @@ public class DictateInputMethodService extends InputMethodService {
                         vibrate();
                         Intent intent = new Intent(DictateInputMethodService.this, PromptEditActivity.class);
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        intent.putExtra("net.devemperor.dictate.prompt_edit_activity_id", model.getId());
+                        intent.putExtra("net.devemperor.asr.prompt_edit_activity_id", model.getId());
                         startActivity(intent);
                     }
                 }
@@ -931,8 +931,8 @@ public class DictateInputMethodService extends InputMethodService {
         }
 
         // enable resend button if previous audio file still exists in cache
-        if (new File(getCacheDir(), sp.getString("net.devemperor.dictate.last_file_name", "audio.m4a")).exists()
-                && sp.getBoolean("net.devemperor.dictate.resend_button", false)) {
+        if (new File(getCacheDir(), sp.getString("net.devemperor.asr.last_file_name", "audio.m4a")).exists()
+                && sp.getBoolean("net.devemperor.asr.resend_button", false)) {
             resendButton.setVisibility(View.VISIBLE);
         } else {
             resendButton.setVisibility(View.GONE);
@@ -942,11 +942,11 @@ public class DictateInputMethodService extends InputMethodService {
         recordButton.setText(getDictateButtonText());
 
         // check if user enabled audio focus
-        audioFocusEnabled = sp.getBoolean("net.devemperor.dictate.audio_focus", true);
+        audioFocusEnabled = sp.getBoolean("net.devemperor.asr.audio_focus", true);
 
         // fill all overlay characters
-        int accentColor = sp.getInt("net.devemperor.dictate.accent_color", -14700810);
-        String charactersString = sp.getString("net.devemperor.dictate.overlay_characters", "()-:!?,.");
+        int accentColor = sp.getInt("net.devemperor.asr.accent_color", -14700810);
+        String charactersString = sp.getString("net.devemperor.asr.overlay_characters", "()-:!?,.");
         for (int i = 0; i < overlayCharactersLl.getChildCount(); i++) {
             TextView charView = (TextView) overlayCharactersLl.getChildAt(i);
             if (i >= charactersString.length()) {
@@ -960,7 +960,7 @@ public class DictateInputMethodService extends InputMethodService {
         }
 
         // update theme
-        String theme = sp.getString("net.devemperor.dictate.theme", "system");
+        String theme = sp.getString("net.devemperor.asr.theme", "system");
         int keyboardBackgroundColor;
         if ("dark".equals(theme) || ("system".equals(theme) && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES)) {
             keyboardBackgroundColor = getResources().getColor(R.color.dictate_keyboard_background_dark, getTheme());
@@ -1005,23 +1005,23 @@ public class DictateInputMethodService extends InputMethodService {
 
         // show infos for updates, ratings or donations
         long totalAudioTime = usageDb.getTotalAudioTime();
-        if (sp.getInt("net.devemperor.dictate.last_version_code", 0) < BuildConfig.VERSION_CODE) {
+        if (sp.getInt("net.devemperor.asr.last_version_code", 0) < BuildConfig.VERSION_CODE) {
             showInfo("update");
-        } else if (totalAudioTime > 180 && totalAudioTime <= 600 && !sp.getBoolean("net.devemperor.dictate.flag_has_rated_in_playstore", false)) {
+        } else if (totalAudioTime > 180 && totalAudioTime <= 600 && !sp.getBoolean("net.devemperor.asr.flag_has_rated_in_playstore", false)) {
             showInfo("rate");  // in case someone had Dictate installed before, he shouldn't get both messages
-        } else if (totalAudioTime > 600 && !sp.getBoolean("net.devemperor.dictate.flag_has_donated", false)) {
+        } else if (totalAudioTime > 600 && !sp.getBoolean("net.devemperor.asr.flag_has_donated", false)) {
             showInfo("donate");
         }
 
         // start audio file transcription if user selected an audio file
-        if (!sp.getString("net.devemperor.dictate.transcription_audio_file", "").isEmpty()) {
-            audioFile = new File(getCacheDir(), sp.getString("net.devemperor.dictate.transcription_audio_file", ""));
-            sp.edit().putString("net.devemperor.dictate.last_file_name", audioFile.getName()).apply();
+        if (!sp.getString("net.devemperor.asr.transcription_audio_file", "").isEmpty()) {
+            audioFile = new File(getCacheDir(), sp.getString("net.devemperor.asr.transcription_audio_file", ""));
+            sp.edit().putString("net.devemperor.asr.last_file_name", audioFile.getName()).apply();
 
-            sp.edit().remove("net.devemperor.dictate.transcription_audio_file").apply();
+            sp.edit().remove("net.devemperor.asr.transcription_audio_file").apply();
             startWhisperApiRequest();
 
-        } else if (sp.getBoolean("net.devemperor.dictate.instant_recording", false)) {
+        } else if (sp.getBoolean("net.devemperor.asr.instant_recording", false)) {
             recordButton.performClick();
         }
     }
@@ -1032,7 +1032,7 @@ public class DictateInputMethodService extends InputMethodService {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd);
 
         // refill all prompts
-        if (sp != null && sp.getBoolean("net.devemperor.dictate.rewording_enabled", true)) {
+        if (sp != null && sp.getBoolean("net.devemperor.asr.rewording_enabled", true)) {
             updateSelectAllPromptState();
         }
     }
@@ -1180,7 +1180,7 @@ public class DictateInputMethodService extends InputMethodService {
 
     private void handlePressAnimationEvent(View view, MotionEvent event) {
         if (view == null || event == null) return;
-        if (!sp.getBoolean("net.devemperor.dictate.animations", true)) {
+        if (!sp.getBoolean("net.devemperor.asr.animations", true)) {
             view.animate().cancel();
             view.setScaleX(1f);
             view.setScaleY(1f);
@@ -1198,7 +1198,7 @@ public class DictateInputMethodService extends InputMethodService {
     }
 
     private void animateKeyPress(View view, boolean pressed) {
-        if (!sp.getBoolean("net.devemperor.dictate.animations", true) || view == null) {
+        if (!sp.getBoolean("net.devemperor.asr.animations", true) || view == null) {
             if (view != null) {
                 view.animate().cancel();
                 if (view.getScaleX() != 1f) view.setScaleX(1f);
@@ -1304,9 +1304,9 @@ public class DictateInputMethodService extends InputMethodService {
         prepareAutoApplyQueue();
 
         audioFile = new File(getCacheDir(), "audio.m4a");
-        sp.edit().putString("net.devemperor.dictate.last_file_name", audioFile.getName()).apply();
+        sp.edit().putString("net.devemperor.asr.last_file_name", audioFile.getName()).apply();
 
-        boolean useBluetoothMic = sp.getBoolean("net.devemperor.dictate.use_bluetooth_mic", false);  // read preference: only use BT mic if enabled
+        boolean useBluetoothMic = sp.getBoolean("net.devemperor.asr.use_bluetooth_mic", false);  // read preference: only use BT mic if enabled
         boolean btAvailable = useBluetoothMic && am.isBluetoothScoAvailableOffCall() && hasBluetoothInputDevice();  // Check if BT SCO is available and (likely) an input device is present
 
         if (btAvailable) {
@@ -1467,12 +1467,12 @@ public class DictateInputMethodService extends InputMethodService {
         if (audioFocusEnabled) am.abandonAudioFocusRequest(audioFocusRequest);
 
         String stylePrompt;
-        switch (sp.getInt("net.devemperor.dictate.style_prompt_selection", 1)) {
+        switch (sp.getInt("net.devemperor.asr.style_prompt_selection", 1)) {
             case 1:
                 stylePrompt = DictateUtils.getPunctuationPromptForLanguage(currentInputLanguageValue);
                 break;
             case 2:
-                stylePrompt = sp.getString("net.devemperor.dictate.style_prompt_custom_text", "");
+                stylePrompt = sp.getString("net.devemperor.asr.style_prompt_custom_text", "");
                 break;
             default:
                 stylePrompt = "";
@@ -1481,18 +1481,18 @@ public class DictateInputMethodService extends InputMethodService {
         speechApiThread = Executors.newSingleThreadExecutor();
         speechApiThread.execute(() -> {
             try {
-                int transcriptionProvider = sp.getInt("net.devemperor.dictate.transcription_provider", 0);
+                int transcriptionProvider = sp.getInt("net.devemperor.asr.transcription_provider", 0);
                 String apiHost = getResources().getStringArray(R.array.dictate_api_providers_values)[transcriptionProvider];
-                if (apiHost.equals("custom_server")) apiHost = sp.getString("net.devemperor.dictate.transcription_custom_host", getString(R.string.dictate_custom_server_host_hint));
+                if (apiHost.equals("custom_server")) apiHost = sp.getString("net.devemperor.asr.transcription_custom_host", getString(R.string.dictate_custom_server_host_hint));
 
-                String apiKey = sp.getString("net.devemperor.dictate.transcription_api_key", sp.getString("net.devemperor.dictate.api_key", "NO_API_KEY")).replaceAll("[^ -~]", "");
-                String proxyHost = sp.getString("net.devemperor.dictate.proxy_host", getString(R.string.dictate_settings_proxy_hint));
+                String apiKey = sp.getString("net.devemperor.asr.transcription_api_key", sp.getString("net.devemperor.asr.api_key", "NO_API_KEY")).replaceAll("[^ -~]", "");
+                String proxyHost = sp.getString("net.devemperor.asr.proxy_host", getString(R.string.dictate_settings_proxy_hint));
 
                 String transcriptionModel = "";
                 switch (transcriptionProvider) {  // for upgrading: use old transcription_model preference
-                    case 0: transcriptionModel = sp.getString("net.devemperor.dictate.transcription_openai_model", sp.getString("net.devemperor.dictate.transcription_model", "gpt-4o-mini-transcribe")); break;
-                    case 1: transcriptionModel = sp.getString("net.devemperor.dictate.transcription_groq_model", "whisper-large-v3-turbo"); break;
-                    case 2: transcriptionModel = sp.getString("net.devemperor.dictate.transcription_custom_model", getString(R.string.dictate_custom_transcription_model_hint));
+                    case 0: transcriptionModel = sp.getString("net.devemperor.asr.transcription_openai_model", sp.getString("net.devemperor.asr.transcription_model", "gpt-4o-mini-transcribe")); break;
+                    case 1: transcriptionModel = sp.getString("net.devemperor.asr.transcription_groq_model", "whisper-large-v3-turbo"); break;
+                    case 2: transcriptionModel = sp.getString("net.devemperor.asr.transcription_custom_model", getString(R.string.dictate_custom_transcription_model_hint));
                 }
 
                 OpenAIOkHttpClient.Builder clientBuilder = OpenAIOkHttpClient.builder()
@@ -1507,7 +1507,7 @@ public class DictateInputMethodService extends InputMethodService {
 
                 if (!currentInputLanguageValue.equals("detect")) transcriptionBuilder.language(currentInputLanguageValue);
                 if (!stylePrompt.isEmpty()) transcriptionBuilder.prompt(stylePrompt);
-                if (sp.getBoolean("net.devemperor.dictate.proxy_enabled", false)) {
+                if (sp.getBoolean("net.devemperor.asr.proxy_enabled", false)) {
                     if (DictateUtils.isValidProxy(proxyHost)) DictateUtils.applyProxy(clientBuilder, sp);
                 }
                 Log.d("DictateKeyboardSerice", "Style-Prompt: " + stylePrompt);
@@ -1557,8 +1557,8 @@ public class DictateInputMethodService extends InputMethodService {
                     startGPTApiRequest(new PromptModel(-1, Integer.MIN_VALUE, "", resultText, true, false));
                 }
 
-                if (new File(getCacheDir(), sp.getString("net.devemperor.dictate.last_file_name", "audio.m4a")).exists()
-                        && sp.getBoolean("net.devemperor.dictate.resend_button", false)) {
+                if (new File(getCacheDir(), sp.getString("net.devemperor.asr.last_file_name", "audio.m4a")).exists()
+                        && sp.getBoolean("net.devemperor.asr.resend_button", false)) {
                     mainHandler.post(() -> resendButton.setVisibility(View.VISIBLE));
                 }
 
@@ -1620,12 +1620,12 @@ public class DictateInputMethodService extends InputMethodService {
         });
 
         String systemPrompt;
-        switch (sp.getInt("net.devemperor.dictate.system_prompt_selection", 1)) {
+        switch (sp.getInt("net.devemperor.asr.system_prompt_selection", 1)) {
             case 1:
                 systemPrompt = DictateUtils.PROMPT_REWORDING_BE_PRECISE;
                 break;
             case 2:
-                systemPrompt = sp.getString("net.devemperor.dictate.system_prompt_custom_text", "");
+                systemPrompt = sp.getString("net.devemperor.asr.system_prompt_custom_text", "");
                 break;
             default:
                 systemPrompt = "";
@@ -1634,10 +1634,10 @@ public class DictateInputMethodService extends InputMethodService {
         rewordingApiThread = Executors.newSingleThreadExecutor();
         rewordingApiThread.execute(() -> {
             try {
-                String prompt = model.getPrompt();
+                String userPrompt = model.getPrompt();
                 String rewordedText;
-                if (prompt.startsWith("[") && prompt.endsWith("]")) {
-                    rewordedText = prompt.substring(1, prompt.length() - 1);
+                if (userPrompt.startsWith("[") && userPrompt.endsWith("]")) {
+                    rewordedText = userPrompt.substring(1, userPrompt.length() - 1);
                 } else {
                     CharSequence selectedText = null;
                     if (overrideSelection != null) {
@@ -1648,12 +1648,11 @@ public class DictateInputMethodService extends InputMethodService {
                             selectedText = selectedTextConnection.getSelectedText(0);
                         }
                     }
-                    prompt += "\n\n" + systemPrompt;
                     if (selectedText != null && selectedText.length() > 0) {
-                        prompt += "\n\n" + selectedText;
+                        userPrompt += "\n\n" + selectedText;
                     }
 
-                    rewordedText = requestRewordingFromApi(prompt);
+                    rewordedText = requestRewordingFromApi(userPrompt, systemPrompt);
                 }
 
                 if (callback != null) {
@@ -1699,10 +1698,10 @@ public class DictateInputMethodService extends InputMethodService {
         });
     }
 
-    private String requestRewordingFromApi(String prompt) {
+    private String requestRewordingFromApi(String userPrompt, String systemPrompt) {
         if (sp == null) throw new IllegalStateException("Preferences unavailable");
 
-        int rewordingProvider = sp.getInt("net.devemperor.dictate.rewording_provider", 0);
+        int rewordingProvider = sp.getInt("net.devemperor.asr.rewording_provider", 0);
         String[] providerValues = getResources().getStringArray(R.array.dictate_api_providers_values);
         if (rewordingProvider < 0 || rewordingProvider >= providerValues.length) {
             throw new IllegalStateException("Invalid rewording provider");
@@ -1710,11 +1709,11 @@ public class DictateInputMethodService extends InputMethodService {
 
         String apiHost = providerValues[rewordingProvider];
         if ("custom_server".equals(apiHost)) {
-            apiHost = sp.getString("net.devemperor.dictate.rewording_custom_host", getString(R.string.dictate_custom_server_host_hint));
+            apiHost = sp.getString("net.devemperor.asr.rewording_custom_host", getString(R.string.dictate_custom_server_host_hint));
         }
 
-        String apiKey = sp.getString("net.devemperor.dictate.rewording_api_key",
-                sp.getString("net.devemperor.dictate.api_key", "NO_API_KEY"));
+        String apiKey = sp.getString("net.devemperor.asr.rewording_api_key",
+                sp.getString("net.devemperor.asr.api_key", "NO_API_KEY"));
         if (TextUtils.isEmpty(apiKey)) throw new IllegalStateException("API key missing");
         apiKey = apiKey.replaceAll("[^ -~]", "");
         if ("NO_API_KEY".equals(apiKey) || apiKey.isEmpty()) throw new IllegalStateException("API key missing");
@@ -1722,14 +1721,14 @@ public class DictateInputMethodService extends InputMethodService {
         String rewordingModel;
         switch (rewordingProvider) {
             case 0:
-                rewordingModel = sp.getString("net.devemperor.dictate.rewording_openai_model",
-                        sp.getString("net.devemperor.dictate.rewording_model", "gpt-4o-mini"));
+                rewordingModel = sp.getString("net.devemperor.asr.rewording_openai_model",
+                        sp.getString("net.devemperor.asr.rewording_model", "gpt-4o-mini"));
                 break;
             case 1:
-                rewordingModel = sp.getString("net.devemperor.dictate.rewording_groq_model", "llama-3.3-70b-versatile");
+                rewordingModel = sp.getString("net.devemperor.asr.rewording_groq_model", "llama-3.3-70b-versatile");
                 break;
             case 2:
-                rewordingModel = sp.getString("net.devemperor.dictate.rewording_custom_model",
+                rewordingModel = sp.getString("net.devemperor.asr.rewording_custom_model",
                         getString(R.string.dictate_custom_rewording_model_hint));
                 break;
             default:
@@ -1742,16 +1741,20 @@ public class DictateInputMethodService extends InputMethodService {
                 .baseUrl(apiHost)
                 .timeout(Duration.ofSeconds(120));
 
-        if (sp.getBoolean("net.devemperor.dictate.proxy_enabled", false)) {
-            String proxyHost = sp.getString("net.devemperor.dictate.proxy_host", getString(R.string.dictate_settings_proxy_hint));
+        if (sp.getBoolean("net.devemperor.asr.proxy_enabled", false)) {
+            String proxyHost = sp.getString("net.devemperor.asr.proxy_host", getString(R.string.dictate_settings_proxy_hint));
             if (DictateUtils.isValidProxy(proxyHost)) {
                 DictateUtils.applyProxy(clientBuilder, sp);
             }
         }
 
-        ChatCompletionCreateParams chatCompletionCreateParams = ChatCompletionCreateParams.builder()
-                .addUserMessage(prompt)
-                .model(rewordingModel)
+        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
+                .model(rewordingModel);
+        if (!TextUtils.isEmpty(systemPrompt)) {
+            paramsBuilder.addSystemMessage(systemPrompt);
+        }
+        ChatCompletionCreateParams chatCompletionCreateParams = paramsBuilder
+                .addUserMessage(userPrompt)
                 .build();
         ChatCompletion chatCompletion;
         int retryCount = 0;
@@ -1780,8 +1783,8 @@ public class DictateInputMethodService extends InputMethodService {
 
     private String applyAutoFormattingIfEnabled(String transcript) {
         if (TextUtils.isEmpty(transcript) || sp == null
-                || !sp.getBoolean("net.devemperor.dictate.auto_formatting_enabled", false)
-                || !sp.getBoolean("net.devemperor.dictate.rewording_enabled", true)) {
+                || !sp.getBoolean("net.devemperor.asr.auto_formatting_enabled", false)
+                || !sp.getBoolean("net.devemperor.asr.rewording_enabled", true)) {
             return transcript;
         }
 
@@ -1791,7 +1794,7 @@ public class DictateInputMethodService extends InputMethodService {
                     "\n\nTranscript:\n" +
                     transcript;
 
-            String formattedText = requestRewordingFromApi(promptBuilder);
+            String formattedText = requestRewordingFromApi(promptBuilder, "");
             if (!TextUtils.isEmpty(formattedText)) {
                 return formattedText.trim();
             }
@@ -1806,13 +1809,13 @@ public class DictateInputMethodService extends InputMethodService {
         if (inputConnection == null) return;
 
         String output = text == null ? "" : text;
-        if (sp.getBoolean("net.devemperor.dictate.instant_output", true)) {
+        if (sp.getBoolean("net.devemperor.asr.instant_output", true)) {
             inputConnection.commitText(output, 1);
-            if (sp.getBoolean("net.devemperor.dictate.auto_enter", false)) {
+            if (sp.getBoolean("net.devemperor.asr.auto_enter", false)) {
                 performEnterAction();
             }
         } else if (mainHandler != null) {
-            int speed = sp.getInt("net.devemperor.dictate.output_speed", 5);
+            int speed = sp.getInt("net.devemperor.asr.output_speed", 5);
             for (int i = 0; i < output.length(); i++) {
                 char character = output.charAt(i);
                 String characterString = String.valueOf(character);
@@ -1822,7 +1825,7 @@ public class DictateInputMethodService extends InputMethodService {
                     InputConnection ic = getCurrentInputConnection();
                     if (ic != null) {
                         ic.commitText(characterString, 1);
-                        if (isLastChar && sp.getBoolean("net.devemperor.dictate.auto_enter", false)) {
+                        if (isLastChar && sp.getBoolean("net.devemperor.asr.auto_enter", false)) {
                             performEnterAction();
                         }
                     }
@@ -1830,7 +1833,7 @@ public class DictateInputMethodService extends InputMethodService {
             }
         } else {
             inputConnection.commitText(output, 1);
-            if (sp.getBoolean("net.devemperor.dictate.auto_enter", false)) {
+            if (sp.getBoolean("net.devemperor.asr.auto_enter", false)) {
                 performEnterAction();
             }
         }
@@ -1908,7 +1911,7 @@ public class DictateInputMethodService extends InputMethodService {
     }
 
     private void prepareAutoApplyQueue() {
-        if (promptsDb == null || sp == null || !sp.getBoolean("net.devemperor.dictate.rewording_enabled", true)) return;
+        if (promptsDb == null || sp == null || !sp.getBoolean("net.devemperor.asr.rewording_enabled", true)) return;
         List<Integer> autoApplyIds = promptsDb.getAutoApplyIds();
         synchronized (queuedPromptIds) {
             List<Integer> manualQueue = new ArrayList<>();
@@ -1965,7 +1968,7 @@ public class DictateInputMethodService extends InputMethodService {
     }
 
     private void sendLogToCrashlytics(Exception e) {
-        String userId = sp.getString("net.devemperor.dictate.user_id", "null");
+        String userId = sp.getString("net.devemperor.asr.user_id", "null");
         Log.e("DictateInputMethodService", "Local exception report; userId=" + userId);
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
@@ -1987,7 +1990,7 @@ public class DictateInputMethodService extends InputMethodService {
                     infoCl.setVisibility(View.GONE);
                 });
                 infoNoButton.setOnClickListener(v -> {
-                    sp.edit().putInt("net.devemperor.dictate.last_version_code", BuildConfig.VERSION_CODE).apply();
+                    sp.edit().putInt("net.devemperor.asr.last_version_code", BuildConfig.VERSION_CODE).apply();
                     infoCl.setVisibility(View.GONE);
                 });
                 break;
@@ -1996,14 +1999,14 @@ public class DictateInputMethodService extends InputMethodService {
                 infoTv.setText(R.string.dictate_rate_app_msg);
                 infoYesButton.setVisibility(View.VISIBLE);
                 infoYesButton.setOnClickListener(v -> {
-                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=net.devemperor.dictate"));
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=net.devemperor.asr"));
                     browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(browserIntent);
-                    sp.edit().putBoolean("net.devemperor.dictate.flag_has_rated_in_playstore", true).apply();
+                    sp.edit().putBoolean("net.devemperor.asr.flag_has_rated_in_playstore", true).apply();
                     infoCl.setVisibility(View.GONE);
                 });
                 infoNoButton.setOnClickListener(v -> {
-                    sp.edit().putBoolean("net.devemperor.dictate.flag_has_rated_in_playstore", true).apply();
+                    sp.edit().putBoolean("net.devemperor.asr.flag_has_rated_in_playstore", true).apply();
                     infoCl.setVisibility(View.GONE);
                 });
                 break;
@@ -2015,13 +2018,13 @@ public class DictateInputMethodService extends InputMethodService {
                     Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://paypal.me/DevEmperor"));
                     browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(browserIntent);
-                    sp.edit().putBoolean("net.devemperor.dictate.flag_has_donated", true)  // in case someone had Dictate installed before, he shouldn't get both messages
-                            .putBoolean("net.devemperor.dictate.flag_has_rated_in_playstore", true).apply();
+                    sp.edit().putBoolean("net.devemperor.asr.flag_has_donated", true)  // in case someone had Dictate installed before, he shouldn't get both messages
+                            .putBoolean("net.devemperor.asr.flag_has_rated_in_playstore", true).apply();
                     infoCl.setVisibility(View.GONE);
                 });
                 infoNoButton.setOnClickListener(v -> {
-                    sp.edit().putBoolean("net.devemperor.dictate.flag_has_donated", true)
-                            .putBoolean("net.devemperor.dictate.flag_has_rated_in_playstore", true).apply();
+                    sp.edit().putBoolean("net.devemperor.asr.flag_has_donated", true)
+                            .putBoolean("net.devemperor.asr.flag_has_rated_in_playstore", true).apply();
                     infoCl.setVisibility(View.GONE);
                 });
                 break;
@@ -2073,19 +2076,19 @@ public class DictateInputMethodService extends InputMethodService {
         List<String> recordDifferentLanguages = Arrays.asList(getResources().getStringArray(R.array.dictate_record_different_languages));
 
         LinkedHashSet<String> defaultLanguages = new LinkedHashSet<>(Arrays.asList(getResources().getStringArray(R.array.dictate_default_input_languages)));
-        Set<String> storedLanguages = sp.getStringSet("net.devemperor.dictate.input_languages", defaultLanguages);
+        Set<String> storedLanguages = sp.getStringSet("net.devemperor.asr.input_languages", defaultLanguages);
         LinkedHashSet<String> sanitizedLanguages = new LinkedHashSet<>();
         for (String language : storedLanguages) {
             if (allLanguagesValues.contains(language)) sanitizedLanguages.add(language);
         }
         if (sanitizedLanguages.isEmpty()) sanitizedLanguages.addAll(defaultLanguages);
         if (!sanitizedLanguages.equals(storedLanguages)) {
-            sp.edit().putStringSet("net.devemperor.dictate.input_languages", sanitizedLanguages).apply();
+            sp.edit().putStringSet("net.devemperor.asr.input_languages", sanitizedLanguages).apply();
         }
 
         List<String> languagesList = new ArrayList<>(sanitizedLanguages);
         if (currentInputLanguagePos >= languagesList.size()) currentInputLanguagePos = 0;
-        sp.edit().putInt("net.devemperor.dictate.input_language_pos", currentInputLanguagePos).apply();
+        sp.edit().putInt("net.devemperor.asr.input_language_pos", currentInputLanguagePos).apply();
 
         currentInputLanguageValue = languagesList.get(currentInputLanguagePos);
         int languageIndex = allLanguagesValues.indexOf(currentInputLanguageValue);
@@ -2138,7 +2141,7 @@ public class DictateInputMethodService extends InputMethodService {
     }
 
     private void highlightSelectedCharacter(TextView selectedView) {
-        int accentColor = sp.getInt("net.devemperor.dictate.accent_color", -14700810);
+        int accentColor = sp.getInt("net.devemperor.asr.accent_color", -14700810);
         int accentColorDark = Color.argb(
                 Color.alpha(accentColor),
                 (int) (Color.red(accentColor) * 0.8f),
@@ -2204,7 +2207,7 @@ public class DictateInputMethodService extends InputMethodService {
     }
 
     private void applyRecordingIconState(boolean active) {
-        if (recordButton == null || !sp.getBoolean("net.devemperor.dictate.animations", true)) return;
+        if (recordButton == null || !sp.getBoolean("net.devemperor.asr.animations", true)) return;
 
         if (active) {
             if (recordPulseX == null || recordPulseY == null) {
