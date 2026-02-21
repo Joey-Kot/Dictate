@@ -361,6 +361,9 @@ public class PreferencesFragment extends PreferenceFragmentCompat {
             try (OutputStreamWriter writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
                 writer.write(root.toString(2));
                 writer.flush();
+            } catch (JSONException e) {
+                showToast(R.string.dictate_global_config_export_failed);
+                return;
             }
             showToast(R.string.dictate_global_config_export_success);
         } catch (IOException e) {
