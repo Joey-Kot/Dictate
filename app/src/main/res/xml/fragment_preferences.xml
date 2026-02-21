@@ -192,6 +192,18 @@
         app:iconSpaceReserved="false">
 
         <androidx.preference.Preference
+            android:key="net.devemperor.asr.global_config_export"
+            android:title="@string/dictate_global_config_export_title"
+            android:summary="@string/dictate_global_config_export_summary"
+            app:iconSpaceReserved="false"/>
+
+        <androidx.preference.Preference
+            android:key="net.devemperor.asr.global_config_import"
+            android:title="@string/dictate_global_config_import_title"
+            android:summary="@string/dictate_global_config_import_summary"
+            app:iconSpaceReserved="false"/>
+
+        <androidx.preference.Preference
             android:key="net.devemperor.asr.how_to"
             android:title="@string/dictate_settings_how_to"
             android:summary="@string/dictate_settings_how_to_summary"

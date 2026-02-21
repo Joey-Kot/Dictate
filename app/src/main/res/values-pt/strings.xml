@@ -135,6 +135,20 @@
     <string name="dictate_prompts_import_failed">Não foi possível importar os prompts.</string>
     <string name="dictate_prompts_export_success">Prompts exportados.</string>
     <string name="dictate_prompts_export_failed">Não foi possível exportar os prompts.</string>
+    <string name="dictate_global_config_export_title">Exportar configuração global</string>
+    <string name="dictate_global_config_export_summary">Exporte configurações do app e prompts de reescrita para um arquivo JSON</string>
+    <string name="dictate_global_config_import_title">Importar configuração global</string>
+    <string name="dictate_global_config_import_summary">Importe configurações do app e prompts de reescrita de um arquivo JSON</string>
+    <string name="dictate_global_config_export_secrets_title">Incluir chaves de API?</string>
+    <string name="dictate_global_config_export_secrets_message">Você pode exportar suas chaves de API junto com a configuração. Guarde o arquivo com segurança se ele contiver dados sensíveis.</string>
+    <string name="dictate_global_config_export_include_secrets">Incluir chaves de API</string>
+    <string name="dictate_global_config_export_exclude_secrets">Excluir chaves de API</string>
+    <string name="dictate_global_config_export_success">Configuração global exportada.</string>
+    <string name="dictate_global_config_export_failed">Não foi possível exportar a configuração global.</string>
+    <string name="dictate_global_config_import_success">Configuração global importada.</string>
+    <string name="dictate_global_config_import_failed">Não foi possível importar a configuração global.</string>
+    <string name="dictate_global_config_import_apply_notice">A página de configurações foi atualizada. Reabra o teclado Dictate para aplicar todas as alterações em tempo de execução.</string>
+    <string name="dictate_global_config_export_filename" translatable="false">dictate_global_config.json</string>
     <string name="dictate_rate_app_msg">Você gosta do Dictate? Ficarei feliz com uma avaliação na Play Store. 😇</string>
     <string name="dictate_enable_keyboard_title">Ativar o teclado Dictate?</string>
     <string name="dictate_enable_keyboard_message">O teclado Dictate não está mais habilitado nas configurações do sistema. Deseja abrir as configurações de teclado do sistema para corrigir isso?</string>

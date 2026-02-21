@@ -136,6 +136,20 @@
     <string name="dictate_prompts_import_failed">Anweisungen konnten nicht importiert werden.</string>
     <string name="dictate_prompts_export_success">Anweisungen exportiert.</string>
     <string name="dictate_prompts_export_failed">Anweisungen konnten nicht exportiert werden.</string>
+    <string name="dictate_global_config_export_title">Globale Konfiguration exportieren</string>
+    <string name="dictate_global_config_export_summary">App-Einstellungen und Überarbeitungs-Anweisungen als JSON-Datei exportieren</string>
+    <string name="dictate_global_config_import_title">Globale Konfiguration importieren</string>
+    <string name="dictate_global_config_import_summary">App-Einstellungen und Überarbeitungs-Anweisungen aus einer JSON-Datei importieren</string>
+    <string name="dictate_global_config_export_secrets_title">API-Schlüssel einschließen?</string>
+    <string name="dictate_global_config_export_secrets_message">Du kannst deine API-Schlüssel zusammen mit der Konfiguration exportieren. Bewahre die Datei sicher auf, wenn sie sensible Daten enthält.</string>
+    <string name="dictate_global_config_export_include_secrets">API-Schlüssel einschließen</string>
+    <string name="dictate_global_config_export_exclude_secrets">API-Schlüssel ausschließen</string>
+    <string name="dictate_global_config_export_success">Globale Konfiguration exportiert.</string>
+    <string name="dictate_global_config_export_failed">Globale Konfiguration konnte nicht exportiert werden.</string>
+    <string name="dictate_global_config_import_success">Globale Konfiguration importiert.</string>
+    <string name="dictate_global_config_import_failed">Globale Konfiguration konnte nicht importiert werden.</string>
+    <string name="dictate_global_config_import_apply_notice">Die Einstellungsseite wurde aktualisiert. Öffne die Dictate-Tastatur neu, damit alle Laufzeitänderungen aktiv werden.</string>
+    <string name="dictate_global_config_export_filename" translatable="false">dictate_global_config.json</string>
     <string name="dictate_rate_app_msg">Gefällt dir Dictate? Ich freue mich über eine Bewertung im PlayStore. 😇</string>
     <string name="dictate_enable_keyboard_title">Dictate Tastatur aktivieren?</string>
     <string name="dictate_enable_keyboard_message">Die Dictate Tastatur ist in den Systemeinstellungen nicht mehr aktiviert. Möchtest du die Systemeinstellungen für die Tastatur öffnen, um dies zu korrigieren?</string>

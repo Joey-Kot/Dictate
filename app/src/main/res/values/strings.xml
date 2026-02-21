@@ -143,6 +143,20 @@
     <string name="dictate_prompts_export_success">Prompts exported.</string>
     <string name="dictate_prompts_export_failed">Could not export prompts.</string>
     <string name="dictate_prompts_export_filename" translatable="false">dictate_prompts.json</string>
+    <string name="dictate_global_config_export_title">Export global config</string>
+    <string name="dictate_global_config_export_summary">Export app settings and rewording prompts to a JSON file</string>
+    <string name="dictate_global_config_import_title">Import global config</string>
+    <string name="dictate_global_config_import_summary">Import app settings and rewording prompts from a JSON file</string>
+    <string name="dictate_global_config_export_secrets_title">Include API keys?</string>
+    <string name="dictate_global_config_export_secrets_message">You can export your API keys together with the config. Keep this file safe if you include sensitive data.</string>
+    <string name="dictate_global_config_export_include_secrets">Include API keys</string>
+    <string name="dictate_global_config_export_exclude_secrets">Exclude API keys</string>
+    <string name="dictate_global_config_export_success">Global config exported.</string>
+    <string name="dictate_global_config_export_failed">Could not export global config.</string>
+    <string name="dictate_global_config_import_success">Global config imported.</string>
+    <string name="dictate_global_config_import_failed">Could not import global config.</string>
+    <string name="dictate_global_config_import_apply_notice">Settings page refreshed. Reopen Dictate keyboard to apply all runtime changes.</string>
+    <string name="dictate_global_config_export_filename" translatable="false">dictate_global_config.json</string>
     <string name="dictate_rate_app_msg">Do you like Dictate? I would be happy to receive a rating in the PlayStore. 😇</string>
     <string name="dictate_enable_keyboard_title">Enable Dictate keyboard?</string>
     <string name="dictate_enable_keyboard_message">The Dictate keyboard isn\'t enabled in the system settings anymore. Do you want to open the system keyboard settings to correct this?</string>
