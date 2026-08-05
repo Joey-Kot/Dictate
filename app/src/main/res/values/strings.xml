@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dictate</string>
+    <string name="accessibility_service_name">Dictate voice transcription</string>
+    <string name="accessibility_service_description">Shows a non-focusable voice button and inserts completed transcriptions into the currently focused editable field.</string>
+</resources>
+

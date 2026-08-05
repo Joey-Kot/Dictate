@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+Temp-Scrape/
+native-build-tmp/
+app/src/main/jniLibs/arm64-v8a/libffmpeg.so
+*.jks
+*.keystore

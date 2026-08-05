@@ -1,0 +1,99 @@
+name: Build and publish Latest
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Optional branch, tag, or commit to build
+        required: false
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: dictate-latest-release
+  cancel-in-progress: true
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ANDROID_NDK_VERSION: 27.2.12479018
+      DICTATE_NATIVE_DOWNLOAD_DIR: ${{ github.workspace }}/.cache/ffmpeg-downloads
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+      - id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;$ANDROID_NDK_VERSION"
+      - run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: .cache/ffmpeg-downloads
+          key: ffmpeg-downloads-8.1-opus-1.5.2-lame-3.100
+      - name: Build arm64 FFmpeg CLI
+        env:
+          DICTATE_NATIVE_BUILD_DIR: ${{ runner.temp }}/dictate-ffmpeg-tmp
+        run: ./scripts/build-android-ffmpeg.sh
+      - name: Validate signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+      - name: Restore release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dictate-release.jks"
+      - name: Build signed arm64 release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/dictate-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          DICTATE_VERSION_CODE: ${{ github.run_number }}
+          DICTATE_VERSION_NAME: 0.1.${{ github.run_number }}
+        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
+      - name: Prepare release files
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/Dictate-latest-arm64-v8a.apk
+          cd dist
+          sha256sum Dictate-latest-arm64-v8a.apk > Dictate-latest-arm64-v8a.apk.sha256
+      - name: Verify APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Dictate-latest-arm64-v8a.apk
+      - name: Publish moving Latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          git tag --force Latest "$BUILD_SHA"
+          git push origin refs/tags/Latest --force
+          if gh release view Latest; then
+            gh release edit Latest --latest --title Latest --target "$BUILD_SHA" --notes "Latest signed arm64-v8a Dictate build from $BUILD_SHA."
+          else
+            gh release create Latest --latest --title Latest --target "$BUILD_SHA" --notes "Latest signed arm64-v8a Dictate build from $BUILD_SHA."
+          fi
+          while IFS= read -r asset; do
+            test -z "$asset" || gh release delete-asset Latest "$asset" --yes
+          done < <(gh release view Latest --json assets --jq '.assets[].name')
+          gh release upload Latest dist/Dictate-latest-arm64-v8a.apk dist/Dictate-latest-arm64-v8a.apk.sha256 --clobber
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/dictate-release.jks"
