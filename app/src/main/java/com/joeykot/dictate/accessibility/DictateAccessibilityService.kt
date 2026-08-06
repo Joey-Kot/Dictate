@@ -42,7 +42,10 @@ class DictateAccessibilityService : AccessibilityService() {
         val focused = findCurrentInputFocus() ?: return false
         return try {
             if (!focused.isEditable || !focused.isEnabled) return false
-            val existing = focused.text?.toString().orEmpty()
+            val existing = editableTextForInsertion(
+                nodeText = focused.text,
+                isShowingHintText = focused.isShowingHintText,
+            )
             val selectionStart = focused.textSelectionStart
             val cursor = if (selectionStart in 0..existing.length) selectionStart else existing.length
             val updated = existing.substring(0, cursor) + text + existing.substring(cursor)
