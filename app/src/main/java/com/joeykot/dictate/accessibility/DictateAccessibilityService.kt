@@ -1,6 +1,7 @@
 package com.joeykot.dictate.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.annotation.TargetApi
 import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
@@ -10,6 +11,8 @@ import com.joeykot.dictate.overlay.OverlayController
 
 class DictateAccessibilityService : AccessibilityService() {
     private var overlayController: OverlayController? = null
+    private var activeVerification: PendingTextInsertionVerification? = null
+    private var activeVerificationToken: Any? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -35,13 +38,104 @@ class DictateAccessibilityService : AccessibilityService() {
         overlayController?.remove()
         overlayController = null
         if (currentInstance === this) currentInstance = null
+        activeVerification?.destroy()
+        activeVerification = null
+        activeVerificationToken = null
         super.onDestroy()
     }
 
-    fun tryInsertAtCurrentCursor(text: String): Boolean {
-        val focused = findCurrentInputFocus() ?: return false
+    internal fun tryInsertAtCurrentCursor(
+        text: String,
+        shouldContinue: () -> Boolean,
+        callback: (TextInsertionResult) -> Unit,
+    ) {
+        if (!shouldContinue()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            tryCommitViaInputConnection(text, shouldContinue, callback)
+            return
+        }
+        callback(trySetTextAtCurrentCursor(text))
+    }
+
+    internal fun tryPasteAtCurrentCursor(): TextInsertionResult {
+        val focused = findCurrentInputFocus()
+            ?: return TextInsertionResult.failure("paste=no_input_focus")
         return try {
-            if (!focused.isEditable || !focused.isEnabled) return false
+            val actionSupported = focused.supportsAction(AccessibilityNodeInfo.ACTION_PASTE)
+            val metadata = focused.diagnosticMetadata(actionSupported)
+            if (!focused.isEnabled) {
+                TextInsertionResult.failure("paste=node_disabled $metadata")
+            } else if (!focused.isEditable && !actionSupported) {
+                TextInsertionResult.failure("paste=node_not_editable $metadata")
+            } else {
+                val pasted = focused.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                if (pasted) {
+                    TextInsertionResult.success(
+                        TextInsertionMethod.PASTE,
+                        "paste=success $metadata",
+                    )
+                } else {
+                    TextInsertionResult.failure("paste=rejected $metadata")
+                }
+            }
+        } catch (error: Exception) {
+            TextInsertionResult.failure("paste=exception:${error.diagnosticName()}")
+        } finally {
+            focused.recycleBeforeApi33()
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.TIRAMISU)
+    private fun tryCommitViaInputConnection(
+        text: String,
+        shouldContinue: () -> Boolean,
+        callback: (TextInsertionResult) -> Unit,
+    ) {
+        if (activeVerification != null) {
+            callback(
+                TextInsertionResult.failure("input_connection=busy")
+                    .followedBy(trySetTextAtCurrentCursor(text)),
+            )
+            return
+        }
+
+        val token = Any()
+        activeVerificationToken = token
+        val verification: PendingTextInsertionVerification = Api33TextInsertionVerifier(
+            service = this,
+            text = text,
+            shouldContinue = shouldContinue,
+            callback = verificationComplete@{ result ->
+                if (activeVerificationToken !== token) return@verificationComplete
+                activeVerification = null
+                activeVerificationToken = null
+                if (!shouldContinue()) return@verificationComplete
+                val finalResult = if (
+                    result.state == TextInsertionState.FAILED && currentInstance === this
+                ) {
+                    result.followedBy(trySetTextAtCurrentCursor(text))
+                } else {
+                    result
+                }
+                callback(finalResult)
+            },
+        )
+        activeVerification = verification
+        verification.start()
+    }
+
+    private fun trySetTextAtCurrentCursor(text: String): TextInsertionResult {
+        val focused = findCurrentInputFocus()
+            ?: return TextInsertionResult.failure("set_text=no_input_focus")
+        return try {
+            val actionSupported = focused.supportsAction(AccessibilityNodeInfo.ACTION_SET_TEXT)
+            val metadata = focused.diagnosticMetadata(actionSupported)
+            if (!focused.isEnabled) {
+                return TextInsertionResult.failure("set_text=node_disabled $metadata")
+            }
+            if (!focused.isEditable && !actionSupported) {
+                return TextInsertionResult.failure("set_text=node_not_editable $metadata")
+            }
             val existing = editableTextForInsertion(
                 nodeText = focused.text,
                 isShowingHintText = focused.isShowingHintText,
@@ -63,10 +157,15 @@ class DictateAccessibilityService : AccessibilityService() {
                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, newCursor)
                 }
                 focused.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection)
+                TextInsertionResult.success(
+                    TextInsertionMethod.SET_TEXT,
+                    "set_text=success $metadata",
+                )
+            } else {
+                TextInsertionResult.failure("set_text=rejected $metadata")
             }
-            inserted
-        } catch (_: Exception) {
-            false
+        } catch (error: Exception) {
+            TextInsertionResult.failure("set_text=exception:${error.diagnosticName()}")
         } finally {
             focused.recycleBeforeApi33()
         }
@@ -97,7 +196,27 @@ class DictateAccessibilityService : AccessibilityService() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) recycle()
     }
 
+    private fun AccessibilityNodeInfo.supportsAction(actionId: Int): Boolean =
+        actionList.any { it.id == actionId }
+
+    private fun AccessibilityNodeInfo.diagnosticMetadata(actionSupported: Boolean): String {
+        val packageName = packageName.diagnosticIdentifier()
+        val className = className.diagnosticIdentifier()
+        return "package=$packageName class=$className editable=$isEditable " +
+            "enabled=$isEnabled action_supported=$actionSupported"
+    }
+
+    private fun CharSequence?.diagnosticIdentifier(): String = this
+        ?.toString()
+        ?.take(MAX_DIAGNOSTIC_IDENTIFIER_LENGTH)
+        ?.ifBlank { "unknown" }
+        ?: "unknown"
+
+    private fun Throwable.diagnosticName(): String = javaClass.simpleName.ifBlank { "Throwable" }
+
     companion object {
+        private const val MAX_DIAGNOSTIC_IDENTIFIER_LENGTH = 120
+
         @Volatile
         private var currentInstance: DictateAccessibilityService? = null
 

@@ -505,29 +505,70 @@ class VoiceJobController(
             ?.interaction
             ?.alwaysCopyToClipboard
             ?: true
-        val outcome = TextDelivery.deliver(application, text, alwaysCopyToClipboard)
-        if (!isCurrent(jobId)) return
+        updateUi(jobId, JobUiState(JobState.REQUESTING, "正在写入转写结果"))
+        TextDelivery.deliver(
+            context = application,
+            text = text,
+            alwaysCopyToClipboard = alwaysCopyToClipboard,
+            shouldContinue = { isCurrent(jobId) },
+        ) deliveryComplete@{ outcome ->
+            if (!isCurrent(jobId)) return@deliveryComplete
+            handleDeliveryOutcome(jobId, outcome)
+        }
+    }
+
+    private fun handleDeliveryOutcome(jobId: Long, outcome: TextDelivery.Outcome) {
+        val insertionSummary = outcome.insertion.diagnosticSummary()
         when {
+            outcome.insertion.unconfirmed && outcome.copied -> {
+                diagnostics.error(
+                    "delivery",
+                    "job=$jobId insertion could not be confirmed; copied to clipboard $insertionSummary",
+                )
+                showToast("已尝试写入当前焦点，但无法确认；转写结果已复制到剪贴板")
+                completeJob(jobId)
+            }
+            outcome.insertion.unconfirmed -> {
+                diagnostics.error(
+                    "delivery",
+                    "job=$jobId insertion could not be confirmed and clipboard copy failed " +
+                        insertionSummary,
+                )
+                showToast("已尝试写入当前焦点，但无法确认，且复制到剪贴板失败")
+                completeJob(jobId)
+            }
             outcome.inserted && outcome.copied -> {
-                diagnostics.info("delivery", "job=$jobId inserted into current focus and copied to clipboard")
+                diagnostics.info(
+                    "delivery",
+                    "job=$jobId inserted into current focus and copied to clipboard $insertionSummary",
+                )
                 completeJob(jobId)
             }
             outcome.inserted && !outcome.copyAttempted -> {
-                diagnostics.info("delivery", "job=$jobId inserted into current focus")
+                diagnostics.info("delivery", "job=$jobId inserted into current focus $insertionSummary")
                 completeJob(jobId)
             }
             outcome.inserted -> {
-                diagnostics.error("delivery", "job=$jobId inserted into current focus but clipboard copy failed")
+                diagnostics.error(
+                    "delivery",
+                    "job=$jobId inserted into current focus but clipboard copy failed $insertionSummary",
+                )
                 showToast("转写结果已写入当前焦点，但复制到剪贴板失败")
                 completeJob(jobId)
             }
             outcome.copied -> {
-                diagnostics.info("delivery", "job=$jobId copied to clipboard fallback")
+                diagnostics.info(
+                    "delivery",
+                    "job=$jobId copied to clipboard fallback $insertionSummary",
+                )
                 showToast("当前焦点不可写入，转写结果已复制到剪贴板")
                 completeJob(jobId)
             }
             else -> {
-                diagnostics.error("delivery", "job=$jobId focus insertion and clipboard both failed")
+                diagnostics.error(
+                    "delivery",
+                    "job=$jobId focus insertion and clipboard both failed $insertionSummary",
+                )
                 finishFailure(jobId, "无法写入当前焦点，也无法写入剪贴板")
             }
         }

@@ -16,4 +16,36 @@ class TextDeliveryPolicyTest {
         assertFalse(shouldCopyToClipboard(alwaysCopyToClipboard = false, inserted = true))
         assertTrue(shouldCopyToClipboard(alwaysCopyToClipboard = false, inserted = false))
     }
+
+    @Test
+    fun pasteFallbackRequiresFailedDirectInsertionAndSuccessfulCopy() {
+        assertTrue(
+            shouldTryPasteFallback(
+                directInsertionFailed = true,
+                copiedToClipboard = true,
+                serviceAvailable = true,
+            ),
+        )
+        assertFalse(
+            shouldTryPasteFallback(
+                directInsertionFailed = false,
+                copiedToClipboard = true,
+                serviceAvailable = true,
+            ),
+        )
+        assertFalse(
+            shouldTryPasteFallback(
+                directInsertionFailed = true,
+                copiedToClipboard = false,
+                serviceAvailable = true,
+            ),
+        )
+        assertFalse(
+            shouldTryPasteFallback(
+                directInsertionFailed = true,
+                copiedToClipboard = true,
+                serviceAvailable = false,
+            ),
+        )
+    }
 }
