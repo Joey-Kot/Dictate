@@ -4,6 +4,8 @@
 
 Dictate 是 Android 语音转写增强层，不是输入法。它显示一个不抢焦点的无障碍悬浮按钮，处理唯一语音任务，将音频直接发送到用户配置的 OpenAI Compatible 端点，并把响应顶层 `text` 插入响应到达时存在的当前可编辑焦点。
 
+https://github.com/user-attachments/assets/2be67e90-1639-4ceb-94db-c9c510f2d183
+
 ## 功能
 
 - 不实现 IME、键盘、候选栏、编辑上下文、历史列表、云账号或代理服务。
@@ -42,8 +44,15 @@ flowchart LR
   C --> E["内嵌 FFmpeg CLI"]
   C --> F["HttpURLConnection"]
   F --> G["用户 Base URL"]
-  C --> H["当前可编辑焦点"]
-  C -->|"默认始终复制；关闭后仅作兜底"| I["剪贴板"]
+  C --> T["TextDelivery"]
+  T --> W["无障碍文本写入管线"]
+  W -->|"Android 13+"| M["AccessibilityInputConnection<br/>commitText + 写入验证"]
+  W -->|"Android 8–12<br/>或明确失败回退"| S["ACTION_SET_TEXT<br/>占位符归一化"]
+  M --> X["当前编辑器"]
+  S --> X
+  T -->|"默认始终复制；失败或无法确认时兜底"| I["剪贴板"]
+  I -->|"直接写入明确失败"| P["ACTION_PASTE"]
+  P --> X
   J["配置页"] --> K["Preferences + Keystore"]
 ```
 
@@ -53,20 +62,52 @@ flowchart LR
 sequenceDiagram
   participant U as 用户
   participant O as 悬浮按钮
+  participant J as VoiceJobController
   participant R as AudioRecord
   participant F as FFmpeg
   participant P as 端点
+  participant D as TextDelivery
   participant A as 无障碍服务
+  participant E as 当前编辑器
+  participant C as 剪贴板
   U->>O: 单击
-  O->>R: 录制单声道原始 PCM
+  O->>J: 开始录音
+  J->>R: 录制单声道原始 PCM
   U->>O: 单击
-  O->>R: 停止并保留原始录音
-  O->>F: 按当前设置转码
-  O->>P: POST /v1/audio/transcriptions
-  P-->>O: {"text":"..."}
-  O->>A: 此刻取得当前焦点
-  A-->>U: 插入完成时的当前焦点
-  O-->>U: 按剪贴板设置复制
+  O->>J: 停止并转写
+  J->>R: 停止并保留原始录音
+  J->>F: 按当前设置转码
+  J->>P: POST /v1/audio/transcriptions
+  P-->>J: {"text":"..."}
+  J->>J: 保持“请求中”，进入写入阶段
+  J->>D: 投递文本（受任务 ID 和取消状态保护）
+  D->>A: 写入此刻的当前编辑器
+  alt Android 13+
+    A->>E: 读取写入前的周边文本
+    A->>E: commitText(text)
+    loop 最多三轮：0 / 100 / 300 ms
+      A->>E: 读取周边文本并验证结果
+    end
+    alt 已确认
+      Note over A,E: 返回 confirmed
+    else 明确未写入
+      A->>E: ACTION_SET_TEXT
+    else 无法确认
+      Note over A,E: 不直接重试，避免重复插入
+    end
+  else Android 8–12
+    A->>E: ACTION_SET_TEXT（忽略显示中的占位符）
+  end
+  A-->>D: confirmed / failed / unconfirmed
+  opt 默认始终复制，或写入失败/无法确认
+    D->>C: 复制转写文本
+  end
+  opt 直接写入明确失败且复制成功
+    D->>A: ACTION_PASTE
+    A->>E: 粘贴到当前焦点
+  end
+  D-->>J: 完成回调（仅任务仍有效）
+  J-->>U: 完成结果或失败提示
 ```
 
 应用从不保存录制开始时的输入框、App、光标或选区，只在有效响应到达后取得当前焦点。
@@ -84,13 +125,17 @@ stateDiagram-v2
   转码中 --> 请求中
   请求中 --> 重试等待中
   重试等待中 --> 请求中
-  请求中 --> 空闲
+  请求中 --> 空闲: 请求或投递结束
   转码中 --> 空闲
   录制中 --> 空闲: 取消并丢弃
   已暂停 --> 空闲: 取消并丢弃
   转码中 --> 空闲: 取消并保留原始录音
   请求中 --> 空闲: 取消并保留原始录音
   重试等待中 --> 空闲: 取消并保留原始录音
+  note right of 请求中
+    包含 HTTP 请求、写入验证、
+    剪贴板复制与粘贴兜底
+  end note
 ```
 
 内部状态严格只有空闲、录制中、已暂停、转码中、请求中和重试等待中。

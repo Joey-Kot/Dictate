@@ -4,6 +4,8 @@ English | [简体中文](README_ZH.md)
 
 Dictate is an Android voice-transcription enhancement layer, not an input method editor. It shows one non-focusable accessibility overlay, records one voice task, sends it directly to the user's OpenAI-compatible endpoint, and inserts the returned top-level `text` into the editable focus that exists when the response arrives.
 
+https://github.com/user-attachments/assets/2be67e90-1639-4ceb-94db-c9c510f2d183
+
 ## Features
 
 - No IME, keyboard, candidate bar, editing context, history list, cloud account, or proxy server.
@@ -42,8 +44,15 @@ flowchart LR
   C --> E["Embedded FFmpeg CLI"]
   C --> F["HttpURLConnection"]
   F --> G["User Base URL"]
-  C --> H["Current editable focus"]
-  C -->|"default: always copy; otherwise fallback"| I["Clipboard"]
+  C --> T["TextDelivery"]
+  T --> W["Accessibility insertion pipeline"]
+  W -->|"Android 13+"| M["AccessibilityInputConnection<br/>commitText + verification"]
+  W -->|"Android 8–12<br/>or confirmed-failure fallback"| S["ACTION_SET_TEXT<br/>hint normalization"]
+  M --> X["Current editor"]
+  S --> X
+  T -->|"default: always copy; fallback on failed or unconfirmed"| I["Clipboard"]
+  I -->|"direct insertion explicitly failed"| P["ACTION_PASTE"]
+  P --> X
   J["Settings"] --> K["Preferences + Keystore"]
 ```
 
@@ -53,20 +62,63 @@ flowchart LR
 sequenceDiagram
   participant U as User
   participant O as Overlay
+  participant J as VoiceJobController
   participant R as AudioRecord
   participant F as FFmpeg
   participant P as Endpoint
+  participant D as TextDelivery
   participant A as Accessibility
+  participant E as Current editor
+  participant C as Clipboard
+
   U->>O: Tap
-  O->>R: Record raw mono PCM
+  O->>J: Start recording
+  J->>R: Record raw mono PCM
+
   U->>O: Tap
-  O->>R: Stop and retain raw audio
-  O->>F: Transcode with current settings
-  O->>P: POST /v1/audio/transcriptions
-  P-->>O: {"text":"..."}
-  O->>A: Resolve current focus now
-  A-->>U: Insert into the current focus
-  O-->>U: Copy according to clipboard setting
+  O->>J: Stop and transcribe
+  J->>R: Stop and retain raw audio
+  J->>F: Transcode with current settings
+  J->>P: POST transcription request
+  P-->>J: Response with transcription text
+
+  J->>J: Remain requesting and enter delivery phase
+  J->>D: Deliver text with job and cancellation guard
+  D->>A: Insert text into the current editor
+
+  alt Android 13 or later
+    A->>E: Capture surrounding text before insertion
+    A->>E: commitText(text)
+
+    loop Checks at zero, one hundred, and three hundred milliseconds
+      A->>E: Capture surrounding text and verify
+    end
+
+    alt Confirmed
+      Note over A,E: Return confirmed
+    else Explicitly not applied
+      A->>E: ACTION_SET_TEXT
+    else Unconfirmed
+      Note over A,E: Do not retry directly to avoid duplicate insertion
+    end
+
+  else Android 8 to 12
+    A->>E: ACTION_SET_TEXT and ignore displayed hint text
+  end
+
+  A-->>D: Confirmed, failed, or unconfirmed
+
+  opt Always copy by default, or insertion failed or unconfirmed
+    D->>C: Copy transcription
+  end
+
+  opt Direct insertion failed and copy succeeded
+    D->>A: ACTION_PASTE
+    A->>E: Paste into current focus
+  end
+
+  D-->>J: Complete callback if the job is still current
+  J-->>U: Completion result or failure message
 ```
 
 The recording-start field, app, cursor, and selection are never stored. Focus is resolved only after a valid response.
@@ -84,13 +136,17 @@ stateDiagram-v2
   Transcoding --> Requesting
   Requesting --> RetryWaiting
   RetryWaiting --> Requesting
-  Requesting --> Idle
+  Requesting --> Idle: request or delivery ends
   Transcoding --> Idle
   Recording --> Idle: cancel/discard
   Paused --> Idle: cancel/discard
   Transcoding --> Idle: cancel/keep raw
   Requesting --> Idle: cancel/keep raw
   RetryWaiting --> Idle: cancel/keep raw
+  note right of Requesting
+    Includes HTTP request, insertion verification,
+    clipboard copy, and paste fallback
+  end note
 ```
 
 Internal states are exactly idle, recording, paused, transcoding, requesting, and retry waiting.
