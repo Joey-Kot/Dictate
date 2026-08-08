@@ -11,6 +11,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -38,6 +40,8 @@ import com.joeykot.dictate.model.RuntimeSettings
 import com.joeykot.dictate.settings.SettingsRepository
 import com.joeykot.dictate.util.AccessibilityStatus
 import java.io.IOException
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 @SuppressLint("SetTextI18n")
 class MainActivity : Activity() {
@@ -75,6 +79,12 @@ class MainActivity : Activity() {
 
     private lateinit var diagnosticsText: TextView
     private var loadingForm = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val settingsExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "dictate-settings-save")
+    }
+    private var settingsWriteInProgress = false
+    private var activityDestroyed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +98,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshPermissionStatus()
+    }
+
+    override fun onDestroy() {
+        activityDestroyed = true
+        settingsExecutor.shutdown()
+        super.onDestroy()
     }
 
     @Deprecated("Uses the platform document picker for broad API 26 compatibility")
@@ -249,10 +265,13 @@ class MainActivity : Activity() {
         codecSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (!loadingForm) {
+                    // The initial callback can arrive after form loading, so preserve compatible choices.
                     updateAudioLinkage(
                         codec = AudioCodec.entries[position],
                         sampleRate = AudioConfig.SAMPLE_RATES[sampleRateSpinner.selectedItemPosition],
-                        desiredContainer = null,
+                        desiredContainer = displayedContainers.getOrNull(
+                            containerSpinner.selectedItemPosition,
+                        ),
                         desiredBitrate = displayedBitrates.getOrNull(bitrateSpinner.selectedItemPosition),
                     )
                 }
@@ -399,14 +418,60 @@ class MainActivity : Activity() {
         return RuntimeSettings(settings, apiKeyInput.text.toString().trim())
     }
 
-    private fun saveSettings(showConfirmation: Boolean): Boolean = try {
-        val runtime = readRuntimeSettings()
-        settingsRepository.save(runtime.app, runtime.apiKey)
-        if (showConfirmation) toast("设置已保存")
-        true
-    } catch (error: Exception) {
-        toast(error.message ?: "设置无效")
-        false
+    private fun saveSettings(
+        showConfirmation: Boolean,
+        onSaved: () -> Unit = {},
+    ): Boolean {
+        val runtime = try {
+            readRuntimeSettings()
+        } catch (error: Exception) {
+            toast(error.message ?: "设置无效")
+            return false
+        }
+        return enqueueSettingsWrite(
+            operation = { settingsRepository.save(runtime.app, runtime.apiKey) },
+            onSuccess = {
+                if (showConfirmation) toast("设置已保存")
+                onSaved()
+            },
+            onFailure = { error -> toast(error.message ?: "设置无效") },
+        )
+    }
+
+    private fun enqueueSettingsWrite(
+        operation: () -> Unit,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit,
+    ): Boolean {
+        if (settingsWriteInProgress) {
+            toast("设置正在保存")
+            return false
+        }
+        settingsWriteInProgress = true
+        return try {
+            settingsExecutor.execute {
+                val failure = try {
+                    operation()
+                    null
+                } catch (error: Exception) {
+                    error
+                }
+                mainHandler.post {
+                    if (activityDestroyed) return@post
+                    settingsWriteInProgress = false
+                    if (failure == null) {
+                        onSuccess()
+                    } else {
+                        onFailure(failure)
+                    }
+                }
+            }
+            true
+        } catch (error: RejectedExecutionException) {
+            settingsWriteInProgress = false
+            if (!activityDestroyed) onFailure(error)
+            false
+        }
     }
 
     private fun runConnectionTest() {
@@ -492,15 +557,16 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun beginExport() {
-        if (!saveSettings(showConfirmation = false)) return
-        startActivityForResult(
-            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/json"
-                putExtra(Intent.EXTRA_TITLE, "dictate-settings.json")
-            },
-            REQUEST_EXPORT,
-        )
+        saveSettings(showConfirmation = false) {
+            startActivityForResult(
+                Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_TITLE, "dictate-settings.json")
+                },
+                REQUEST_EXPORT,
+            )
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -549,13 +615,16 @@ class MainActivity : Activity() {
     }
 
     private fun applyImport(preview: SettingsRepository.ImportPreview, allowApiKey: Boolean) {
-        try {
-            settingsRepository.applyImport(preview, allowApiKey)
-            loadSettingsIntoForm()
-            toast("配置已导入")
-        } catch (error: Exception) {
-            toast("导入失败：${error.message ?: error.javaClass.simpleName}")
-        }
+        enqueueSettingsWrite(
+            operation = { settingsRepository.applyImport(preview, allowApiKey) },
+            onSuccess = {
+                loadSettingsIntoForm()
+                toast("配置已导入")
+            },
+            onFailure = { error ->
+                toast("导入失败：${error.message ?: error.javaClass.simpleName}")
+            },
+        )
     }
 
     private fun verticalGroup(): LinearLayout = LinearLayout(this).apply {

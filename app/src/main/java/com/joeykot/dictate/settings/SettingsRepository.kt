@@ -1,6 +1,8 @@
 package com.joeykot.dictate.settings
 
+import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Looper
 import com.joeykot.dictate.model.AppSettings
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
@@ -16,7 +18,7 @@ import org.json.JSONObject
 
 class SettingsRepository(context: Context) {
     private val preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val secureApiKeyStore = SecureApiKeyStore(context)
+    private val secureApiKeyStore = SecureApiKeyStore(context, preferences)
 
     @Synchronized
     fun get(): AppSettings {
@@ -59,15 +61,18 @@ class SettingsRepository(context: Context) {
         )
     }
 
+    @Synchronized
     fun runtime(): RuntimeSettings = RuntimeSettings(get(), secureApiKeyStore.get())
 
+    @SuppressLint("ApplySharedPref")
     @Synchronized
     fun save(settings: AppSettings, apiKey: String) {
+        check(Looper.myLooper() != Looper.getMainLooper()) { "设置写入不能在主线程执行" }
         val errors = validate(settings)
         require(errors.isEmpty()) { errors.joinToString("；") }
 
         val normalized = settings.copy(audio = settings.audio.normalized())
-        preferences.edit()
+        val editor = preferences.edit()
             .putInt(KEY_BIT_DEPTH, normalized.audio.bitDepth)
             .putInt(KEY_SAMPLE_RATE, normalized.audio.sampleRate)
             .putString(KEY_CODEC, normalized.audio.codec.name)
@@ -85,8 +90,10 @@ class SettingsRepository(context: Context) {
             .putLong(KEY_LONG_PRESS, normalized.interaction.longPressMs)
             .putLong(KEY_DOUBLE_TAP, normalized.interaction.doubleTapMs)
             .putBoolean(KEY_ALWAYS_COPY_TO_CLIPBOARD, normalized.interaction.alwaysCopyToClipboard)
-            .apply()
-        secureApiKeyStore.set(apiKey.trim())
+        secureApiKeyStore.stage(editor, apiKey.trim())
+        // The settings and encrypted API Key must become durable as one transaction.
+        check(editor.commit()) { "设置写入失败" }
+        secureApiKeyStore.clearLegacyValue()
     }
 
     fun validate(settings: AppSettings): List<String> = buildList {

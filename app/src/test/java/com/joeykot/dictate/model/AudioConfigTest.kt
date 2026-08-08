@@ -27,6 +27,15 @@ class AudioConfigTest {
     }
 
     @Test
+    fun normalizationPreservesCompatibleOggContainer() {
+        val normalized = AudioConfig(
+            codec = AudioCodec.OPUS,
+            container = AudioContainer.OGG,
+        ).normalized()
+        assertEquals(AudioContainer.OGG, normalized.container)
+    }
+
+    @Test
     fun opusRejectsUnsupported320Kbps() {
         val normalized = AudioConfig(
             codec = AudioCodec.OPUS,
