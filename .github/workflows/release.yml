@@ -34,7 +34,9 @@ jobs:
           java-version: 17
           cache: gradle
       - uses: gradle/actions/wrapper-validation@v4
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - run: yes | sdkmanager --licenses
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;$ANDROID_NDK_VERSION"
       - run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
