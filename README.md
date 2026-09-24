@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/2be67e90-1639-4ceb-94db-c9c510f2d183
 
 - No IME, keyboard, candidate bar, editing context, history list, cloud account, or proxy server.
 - `AudioRecord` PCM capture with pause/resume, microphone foreground service, wake lock, and cancellation.
-- Draggable, non-focusable accessibility overlay with persisted, inset-aware screen position; dragging never changes the active voice task.
+- Draggable, non-focusable accessibility overlay with persisted, inset-aware screen position; its size, opacity, and recording/paused/processing color scheme are configurable and update without restarting the accessibility service.
 - An in-progress recording continues while the screen is off; no lock-screen controls or lock-screen text insertion are provided.
 - Embedded FFmpeg `n8.1`, Opus `1.5.2`, and LAME `3.100`, built from source for `arm64-v8a` only.
 - Opus, MP3, AAC, and PCM/WAV output with valid codec/container choices only.
@@ -193,7 +193,7 @@ GitHub Actions is the default release path. Pushes to `main` and `dev`, plus man
 2. Enter Base URL (`https://example.com` or `https://example.com/v1`), API Key, and model.
 3. Optionally add a flat JSON object of multipart fields. Arrays, nested objects, `null`, `file`, and `model` are rejected.
 4. Run the real endpoint test, which transcodes an embedded short spoken clip with current audio settings and calls the transcription endpoint—not `/v1/models`.
-5. Save, keep a cursor in an ordinary editable field, and use the floating button.
+5. Optionally set the floating button's size, opacity, and a preset or custom three-state color scheme; then save, keep a cursor in an ordinary editable field, and use the floating button.
 
 The clipboard safety copy is enabled by default. Turning it off restores fallback-only behavior: Dictate copies only when current-focus insertion fails.
 

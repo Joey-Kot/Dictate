@@ -122,11 +122,111 @@ data class InteractionConfig(
     }
 }
 
+enum class OverlayColorScheme(val value: String) {
+    DEFAULT("default"),
+    OCEAN("ocean"),
+    SUNSET("sunset"),
+    COLOR_BLIND("color_blind"),
+    CUSTOM("custom"),
+}
+
+/**
+ * An opaque RGB color represented as an integer in the range 0x000000..0xFFFFFF.
+ * The overlay owns alpha separately so color schemes and button opacity cannot conflict.
+ */
+data class OverlayPalette(
+    val recordingColor: Int = DEFAULT_RECORDING_COLOR,
+    val pausedColor: Int = DEFAULT_PAUSED_COLOR,
+    val processingColor: Int = DEFAULT_PROCESSING_COLOR,
+) {
+    fun normalized(): OverlayPalette = copy(
+        recordingColor = recordingColor.takeIf { isValidRgb(it) } ?: DEFAULT_RECORDING_COLOR,
+        pausedColor = pausedColor.takeIf { isValidRgb(it) } ?: DEFAULT_PAUSED_COLOR,
+        processingColor = processingColor.takeIf { isValidRgb(it) } ?: DEFAULT_PROCESSING_COLOR,
+    )
+
+    fun validate(): List<String> = buildList {
+        if (!isValidRgb(recordingColor)) add("录制颜色必须是 #RRGGBB")
+        if (!isValidRgb(pausedColor)) add("暂停颜色必须是 #RRGGBB")
+        if (!isValidRgb(processingColor)) add("处理颜色必须是 #RRGGBB")
+    }
+
+    companion object {
+        const val DEFAULT_RECORDING_COLOR = 0xDC2626
+        const val DEFAULT_PAUSED_COLOR = 0x16A34A
+        const val DEFAULT_PROCESSING_COLOR = 0x2563EB
+
+        val DEFAULT = OverlayPalette()
+        val OCEAN = OverlayPalette(
+            recordingColor = 0x0F766E,
+            pausedColor = 0x0369A1,
+            processingColor = 0x4338CA,
+        )
+        val SUNSET = OverlayPalette(
+            recordingColor = 0xC2410C,
+            pausedColor = 0xA16207,
+            processingColor = 0x7E22CE,
+        )
+        val COLOR_BLIND = OverlayPalette(
+            recordingColor = 0xD55E00,
+            pausedColor = 0x009E73,
+            processingColor = 0x0072B2,
+        )
+
+        fun isValidRgb(color: Int): Boolean = color in 0x000000..0xFFFFFF
+    }
+}
+
+data class DisplayConfig(
+    val buttonScale: Float = DEFAULT_BUTTON_SCALE,
+    val buttonOpacity: Float = DEFAULT_BUTTON_OPACITY,
+    val colorScheme: OverlayColorScheme = OverlayColorScheme.DEFAULT,
+    val customPalette: OverlayPalette = OverlayPalette.DEFAULT,
+) {
+    fun normalized(): DisplayConfig = copy(
+        buttonScale = buttonScale.takeIf { it.isFinite() }
+            ?.coerceIn(MIN_BUTTON_SCALE, MAX_BUTTON_SCALE)
+            ?: DEFAULT_BUTTON_SCALE,
+        buttonOpacity = buttonOpacity.takeIf { it.isFinite() }
+            ?.coerceIn(MIN_BUTTON_OPACITY, MAX_BUTTON_OPACITY)
+            ?: DEFAULT_BUTTON_OPACITY,
+        customPalette = customPalette.normalized(),
+    )
+
+    fun validate(): List<String> = buildList {
+        if (!buttonScale.isFinite() || buttonScale !in MIN_BUTTON_SCALE..MAX_BUTTON_SCALE) {
+            add("按钮大小必须在 $MIN_BUTTON_SCALE 到 $MAX_BUTTON_SCALE 之间")
+        }
+        if (!buttonOpacity.isFinite() || buttonOpacity !in MIN_BUTTON_OPACITY..MAX_BUTTON_OPACITY) {
+            add("按钮不透明度必须在 $MIN_BUTTON_OPACITY 到 $MAX_BUTTON_OPACITY 之间")
+        }
+        addAll(customPalette.validate())
+    }
+
+    fun effectivePalette(): OverlayPalette = when (colorScheme) {
+        OverlayColorScheme.DEFAULT -> OverlayPalette.DEFAULT
+        OverlayColorScheme.OCEAN -> OverlayPalette.OCEAN
+        OverlayColorScheme.SUNSET -> OverlayPalette.SUNSET
+        OverlayColorScheme.COLOR_BLIND -> OverlayPalette.COLOR_BLIND
+        OverlayColorScheme.CUSTOM -> customPalette
+    }
+
+    companion object {
+        const val MIN_BUTTON_SCALE = 0.5f
+        const val MAX_BUTTON_SCALE = 2f
+        const val DEFAULT_BUTTON_SCALE = 1f
+        const val MIN_BUTTON_OPACITY = 0.3f
+        const val MAX_BUTTON_OPACITY = 1f
+        const val DEFAULT_BUTTON_OPACITY = 1f
+    }
+}
+
 data class AppSettings(
     val audio: AudioConfig = AudioConfig(),
     val provider: ProviderConfig = ProviderConfig(),
     val retry: RetryConfig = RetryConfig(),
     val interaction: InteractionConfig = InteractionConfig(),
+    val display: DisplayConfig = DisplayConfig(),
 )
 
 data class RuntimeSettings(

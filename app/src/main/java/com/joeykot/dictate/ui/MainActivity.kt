@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,24 +25,31 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.joeykot.dictate.DictateApplication
+import com.joeykot.dictate.accessibility.DictateAccessibilityService
 import com.joeykot.dictate.model.AppSettings
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.AudioContainer
+import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.model.InteractionConfig
+import com.joeykot.dictate.model.OverlayColorScheme
+import com.joeykot.dictate.model.OverlayPalette
 import com.joeykot.dictate.model.ProviderConfig
 import com.joeykot.dictate.model.RetryConfig
 import com.joeykot.dictate.model.RuntimeSettings
 import com.joeykot.dictate.settings.SettingsRepository
 import com.joeykot.dictate.util.AccessibilityStatus
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import kotlin.math.roundToInt
 
 @SuppressLint("SetTextI18n")
 class MainActivity : Activity() {
@@ -77,6 +85,20 @@ class MainActivity : Activity() {
     private lateinit var longPressInput: EditText
     private lateinit var doubleTapInput: EditText
 
+    private lateinit var buttonScaleSeekBar: SeekBar
+    private lateinit var buttonScaleValue: TextView
+    private lateinit var buttonOpacitySeekBar: SeekBar
+    private lateinit var buttonOpacityValue: TextView
+    private lateinit var colorSchemeSpinner: Spinner
+    private lateinit var customColorsContainer: LinearLayout
+    private lateinit var recordingPreview: View
+    private lateinit var pausedPreview: View
+    private lateinit var processingPreview: View
+    private lateinit var recordingColorEditor: ColorEditor
+    private lateinit var pausedColorEditor: ColorEditor
+    private lateinit var processingColorEditor: ColorEditor
+    private var customPaletteDraft = OverlayPalette.DEFAULT
+
     private lateinit var diagnosticsText: TextView
     private var loadingForm = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -85,6 +107,13 @@ class MainActivity : Activity() {
     }
     private var settingsWriteInProgress = false
     private var activityDestroyed = false
+
+    private data class ColorEditor(
+        val label: String,
+        val row: LinearLayout,
+        val swatch: View,
+        val value: TextView,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -168,6 +197,8 @@ class MainActivity : Activity() {
         root.addView(buildRetrySection())
         root.addView(sectionTitle("4. 交互"))
         root.addView(buildInteractionSection())
+        root.addView(sectionTitle("5. 显示"))
+        root.addView(buildDisplaySection())
 
         root.addView(Button(this).apply {
             text = "保存设置"
@@ -355,6 +386,106 @@ class MainActivity : Activity() {
         })
     }
 
+    private fun buildDisplaySection(): View = verticalGroup().apply {
+        buttonScaleSeekBar = SeekBar(this@MainActivity).apply {
+            max = BUTTON_SCALE_PROGRESS_MAX
+        }
+        buttonScaleValue = TextView(this@MainActivity).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(dp(8), 0, 0, 0)
+        }
+        buttonScaleSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                updateButtonScaleValue(scaleFromProgress(progress))
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
+        })
+        addView(labeledRow("按钮大小", sliderWithValue(buttonScaleSeekBar, buttonScaleValue)))
+
+        buttonOpacitySeekBar = SeekBar(this@MainActivity).apply {
+            max = BUTTON_OPACITY_PROGRESS_MAX
+        }
+        buttonOpacityValue = TextView(this@MainActivity).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(dp(8), 0, 0, 0)
+        }
+        buttonOpacitySeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                updateButtonOpacityValue(opacityFromProgress(progress))
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
+        })
+        addView(labeledRow("按钮不透明度", sliderWithValue(buttonOpacitySeekBar, buttonOpacityValue)))
+        addView(TextView(this@MainActivity).apply {
+            text = "透明度会在现有空闲、工作、按压与处理中动画的透明度基础上统一叠乘。"
+            setTextColor(Color.GRAY)
+            setPadding(0, dp(4), 0, dp(4))
+        })
+
+        colorSchemeSpinner = spinner(OverlayColorScheme.entries.map(::colorSchemeLabel))
+        addView(labeledRow("色系搭配", colorSchemeSpinner))
+
+        val previewRow = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, dp(4))
+        }
+        val recordingItem = colorPreviewItem("录制")
+        recordingPreview = recordingItem.first
+        previewRow.addView(recordingItem.second, weighted())
+        val pausedItem = colorPreviewItem("暂停")
+        pausedPreview = pausedItem.first
+        previewRow.addView(pausedItem.second, weighted(left = 8))
+        val processingItem = colorPreviewItem("处理中")
+        processingPreview = processingItem.first
+        previewRow.addView(processingItem.second, weighted(left = 8))
+        addView(previewRow)
+
+        customColorsContainer = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(2), 0, 0)
+        }
+        recordingColorEditor = colorEditor(
+            label = "录制颜色",
+            currentColor = { customPaletteDraft.recordingColor },
+        ) { color ->
+            customPaletteDraft = customPaletteDraft.copy(recordingColor = color)
+            updateColorSchemeUi()
+        }
+        customColorsContainer.addView(recordingColorEditor.row)
+        pausedColorEditor = colorEditor(
+            label = "暂停颜色",
+            currentColor = { customPaletteDraft.pausedColor },
+        ) { color ->
+            customPaletteDraft = customPaletteDraft.copy(pausedColor = color)
+            updateColorSchemeUi()
+        }
+        customColorsContainer.addView(pausedColorEditor.row)
+        processingColorEditor = colorEditor(
+            label = "处理中颜色",
+            currentColor = { customPaletteDraft.processingColor },
+        ) { color ->
+            customPaletteDraft = customPaletteDraft.copy(processingColor = color)
+            updateColorSchemeUi()
+        }
+        customColorsContainer.addView(processingColorEditor.row)
+        addView(customColorsContainer)
+
+        colorSchemeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (!loadingForm) updateColorSchemeUi()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+    }
+
     private fun loadSettingsIntoForm() {
         val settings = settingsRepository.get()
         loadingForm = true
@@ -377,7 +508,14 @@ class MainActivity : Activity() {
         alwaysCopyToClipboard.isChecked = settings.interaction.alwaysCopyToClipboard
         longPressInput.setText(settings.interaction.longPressMs.toString())
         doubleTapInput.setText(settings.interaction.doubleTapMs.toString())
+        customPaletteDraft = settings.display.customPalette
+        buttonScaleSeekBar.progress = scaleToProgress(settings.display.buttonScale)
+        buttonOpacitySeekBar.progress = opacityToProgress(settings.display.buttonOpacity)
+        colorSchemeSpinner.setSelection(
+            OverlayColorScheme.entries.indexOf(settings.display.colorScheme).coerceAtLeast(0),
+        )
         loadingForm = false
+        updateColorSchemeUi()
     }
 
     private fun readRuntimeSettings(): RuntimeSettings {
@@ -412,6 +550,12 @@ class MainActivity : Activity() {
                     ?: throw IllegalArgumentException("双击间隔必须是整数"),
                 alwaysCopyToClipboard = alwaysCopyToClipboard.isChecked,
             ),
+            display = DisplayConfig(
+                buttonScale = scaleFromProgress(buttonScaleSeekBar.progress),
+                buttonOpacity = opacityFromProgress(buttonOpacitySeekBar.progress),
+                colorScheme = selectedColorScheme(),
+                customPalette = customPaletteDraft,
+            ),
         )
         val errors = settingsRepository.validate(settings)
         if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("；"))
@@ -431,6 +575,7 @@ class MainActivity : Activity() {
         return enqueueSettingsWrite(
             operation = { settingsRepository.save(runtime.app, runtime.apiKey) },
             onSuccess = {
+                refreshOverlayAppearance()
                 if (showConfirmation) toast("设置已保存")
                 onSaved()
             },
@@ -619,12 +764,224 @@ class MainActivity : Activity() {
             operation = { settingsRepository.applyImport(preview, allowApiKey) },
             onSuccess = {
                 loadSettingsIntoForm()
+                refreshOverlayAppearance()
                 toast("配置已导入")
             },
             onFailure = { error ->
                 toast("导入失败：${error.message ?: error.javaClass.simpleName}")
             },
         )
+    }
+
+    private fun sliderWithValue(seekBar: SeekBar, value: TextView): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                seekBar,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                value,
+                LinearLayout.LayoutParams(dp(58), ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
+
+    private fun colorPreviewItem(label: String): Pair<View, LinearLayout> {
+        val swatch = View(this).apply {
+            contentDescription = "${label}颜色预览"
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(swatch, LinearLayout.LayoutParams(dp(20), dp(20)))
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 13f
+                setPadding(dp(6), 0, 0, 0)
+            })
+        }
+        return swatch to container
+    }
+
+    private fun colorEditor(
+        label: String,
+        currentColor: () -> Int,
+        onColorSelected: (Int) -> Unit,
+    ): ColorEditor {
+        val swatch = View(this).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        val value = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 13f
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(dp(8), 0, dp(8), 0)
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(44)
+            isClickable = true
+            isFocusable = true
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 15f
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(value, LinearLayout.LayoutParams(dp(76), ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(swatch, LinearLayout.LayoutParams(dp(32), dp(32)))
+            setOnClickListener {
+                showColorPicker(label, currentColor(), onColorSelected)
+            }
+        }
+        return ColorEditor(label, row, swatch, value)
+    }
+
+    private fun showColorPicker(
+        label: String,
+        currentColor: Int,
+        onColorSelected: (Int) -> Unit,
+    ) {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+        val picker = CircularColorPickerView(this, currentColor)
+        content.addView(
+            picker,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(COLOR_PICKER_SIZE_DP),
+            ),
+        )
+        val valueRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(12), 0, 0)
+        }
+        val preview = View(this)
+        val value = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 16f
+            setPadding(dp(12), 0, 0, 0)
+        }
+        valueRow.addView(preview, LinearLayout.LayoutParams(dp(36), dp(36)))
+        valueRow.addView(value)
+        content.addView(valueRow)
+
+        content.addView(TextView(this).apply {
+            text = "亮度"
+            setPadding(0, dp(14), 0, 0)
+        })
+        val brightness = SeekBar(this).apply { max = 100 }
+        content.addView(brightness, matchWrap())
+
+        fun renderColor(color: Int) {
+            setColorSwatch(preview, color)
+            value.text = colorToHex(color)
+        }
+
+        picker.onColorChanged = ::renderColor
+        brightness.progress = (picker.brightness * 100f).roundToInt().coerceIn(0, 100)
+        brightness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                picker.brightness = progress / 100f
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
+        })
+        renderColor(picker.color)
+
+        AlertDialog.Builder(this)
+            .setTitle(label)
+            .setView(content)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("确定") { _, _ -> onColorSelected(picker.color) }
+            .show()
+    }
+
+    private fun updateColorSchemeUi() {
+        val colorScheme = selectedColorScheme()
+        customColorsContainer.visibility = if (colorScheme == OverlayColorScheme.CUSTOM) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        updateColorEditor(recordingColorEditor, customPaletteDraft.recordingColor)
+        updateColorEditor(pausedColorEditor, customPaletteDraft.pausedColor)
+        updateColorEditor(processingColorEditor, customPaletteDraft.processingColor)
+
+        val palette = DisplayConfig(
+            colorScheme = colorScheme,
+            customPalette = customPaletteDraft,
+        ).effectivePalette()
+        setColorSwatch(recordingPreview, palette.recordingColor)
+        setColorSwatch(pausedPreview, palette.pausedColor)
+        setColorSwatch(processingPreview, palette.processingColor)
+    }
+
+    private fun updateColorEditor(editor: ColorEditor, color: Int) {
+        editor.value.text = colorToHex(color)
+        editor.row.contentDescription = "编辑${editor.label}，当前为 ${colorToHex(color)}"
+        setColorSwatch(editor.swatch, color)
+    }
+
+    private fun setColorSwatch(view: View, color: Int) {
+        val outline = if (isLightColor(color)) Color.DKGRAY else Color.argb(110, 255, 255, 255)
+        view.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.rgb((color shr 16) and 0xFF, (color shr 8) and 0xFF, color and 0xFF))
+            setStroke(dp(1), outline)
+        }
+    }
+
+    private fun selectedColorScheme(): OverlayColorScheme =
+        OverlayColorScheme.entries.getOrNull(colorSchemeSpinner.selectedItemPosition)
+            ?: OverlayColorScheme.DEFAULT
+
+    private fun updateButtonScaleValue(scale: Float) {
+        buttonScaleValue.text = String.format(Locale.ROOT, "%.2f×", scale)
+    }
+
+    private fun updateButtonOpacityValue(opacity: Float) {
+        buttonOpacityValue.text = "${(opacity * 100f).roundToInt()}%"
+    }
+
+    private fun scaleFromProgress(progress: Int): Float =
+        DisplayConfig.MIN_BUTTON_SCALE + progress.coerceIn(0, BUTTON_SCALE_PROGRESS_MAX) / 100f
+
+    private fun scaleToProgress(scale: Float): Int =
+        ((scale.coerceIn(DisplayConfig.MIN_BUTTON_SCALE, DisplayConfig.MAX_BUTTON_SCALE) -
+            DisplayConfig.MIN_BUTTON_SCALE) * 100f).roundToInt()
+
+    private fun opacityFromProgress(progress: Int): Float =
+        DisplayConfig.MIN_BUTTON_OPACITY + progress.coerceIn(0, BUTTON_OPACITY_PROGRESS_MAX) / 100f
+
+    private fun opacityToProgress(opacity: Float): Int =
+        ((opacity.coerceIn(DisplayConfig.MIN_BUTTON_OPACITY, DisplayConfig.MAX_BUTTON_OPACITY) -
+            DisplayConfig.MIN_BUTTON_OPACITY) * 100f).roundToInt()
+
+    private fun colorSchemeLabel(scheme: OverlayColorScheme): String = when (scheme) {
+        OverlayColorScheme.DEFAULT -> "默认（当前配色）"
+        OverlayColorScheme.OCEAN -> "海洋"
+        OverlayColorScheme.SUNSET -> "日落"
+        OverlayColorScheme.COLOR_BLIND -> "色盲友好"
+        OverlayColorScheme.CUSTOM -> "Custom"
+    }
+
+    private fun colorToHex(color: Int): String = String.format(Locale.ROOT, "#%06X", color)
+
+    private fun isLightColor(color: Int): Boolean {
+        val red = (color shr 16) and 0xFF
+        val green = (color shr 8) and 0xFF
+        val blue = color and 0xFF
+        return red * 299 + green * 587 + blue * 114 >= 160_000
+    }
+
+    private fun refreshOverlayAppearance() {
+        DictateAccessibilityService.current()?.refreshOverlayAppearance()
     }
 
     private fun verticalGroup(): LinearLayout = LinearLayout(this).apply {
@@ -716,5 +1073,8 @@ class MainActivity : Activity() {
         private const val REQUEST_EXPORT = 101
         private const val REQUEST_IMPORT = 102
         private const val MAX_IMPORT_CHARS = 1_000_000
+        private const val BUTTON_SCALE_PROGRESS_MAX = 150
+        private const val BUTTON_OPACITY_PROGRESS_MAX = 70
+        private const val COLOR_PICKER_SIZE_DP = 240
     }
 }

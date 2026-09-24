@@ -7,7 +7,10 @@ import com.joeykot.dictate.model.AppSettings
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.AudioContainer
+import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.model.InteractionConfig
+import com.joeykot.dictate.model.OverlayColorScheme
+import com.joeykot.dictate.model.OverlayPalette
 import com.joeykot.dictate.model.ProviderConfig
 import com.joeykot.dictate.model.RetryConfig
 import com.joeykot.dictate.model.RuntimeSettings
@@ -15,6 +18,7 @@ import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
 import org.json.JSONException
 import org.json.JSONObject
+import java.util.Locale
 
 class SettingsRepository(context: Context) {
     private val preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -58,6 +62,33 @@ class SettingsRepository(context: Context) {
                 doubleTapMs = preferences.getLong(KEY_DOUBLE_TAP, 500L),
                 alwaysCopyToClipboard = preferences.getBoolean(KEY_ALWAYS_COPY_TO_CLIPBOARD, true),
             ),
+            display = DisplayConfig(
+                buttonScale = preferences.getFloat(
+                    KEY_BUTTON_SCALE,
+                    DisplayConfig.DEFAULT_BUTTON_SCALE,
+                ),
+                buttonOpacity = preferences.getFloat(
+                    KEY_BUTTON_OPACITY,
+                    DisplayConfig.DEFAULT_BUTTON_OPACITY,
+                ),
+                colorScheme = OverlayColorScheme.entries.find {
+                    it.value == preferences.getString(KEY_COLOR_SCHEME, null)
+                } ?: OverlayColorScheme.DEFAULT,
+                customPalette = OverlayPalette(
+                    recordingColor = preferences.getInt(
+                        KEY_CUSTOM_RECORDING_COLOR,
+                        OverlayPalette.DEFAULT_RECORDING_COLOR,
+                    ),
+                    pausedColor = preferences.getInt(
+                        KEY_CUSTOM_PAUSED_COLOR,
+                        OverlayPalette.DEFAULT_PAUSED_COLOR,
+                    ),
+                    processingColor = preferences.getInt(
+                        KEY_CUSTOM_PROCESSING_COLOR,
+                        OverlayPalette.DEFAULT_PROCESSING_COLOR,
+                    ),
+                ),
+            ).normalized(),
         )
     }
 
@@ -71,7 +102,10 @@ class SettingsRepository(context: Context) {
         val errors = validate(settings)
         require(errors.isEmpty()) { errors.joinToString("；") }
 
-        val normalized = settings.copy(audio = settings.audio.normalized())
+        val normalized = settings.copy(
+            audio = settings.audio.normalized(),
+            display = settings.display.normalized(),
+        )
         val editor = preferences.edit()
             .putInt(KEY_BIT_DEPTH, normalized.audio.bitDepth)
             .putInt(KEY_SAMPLE_RATE, normalized.audio.sampleRate)
@@ -90,6 +124,12 @@ class SettingsRepository(context: Context) {
             .putLong(KEY_LONG_PRESS, normalized.interaction.longPressMs)
             .putLong(KEY_DOUBLE_TAP, normalized.interaction.doubleTapMs)
             .putBoolean(KEY_ALWAYS_COPY_TO_CLIPBOARD, normalized.interaction.alwaysCopyToClipboard)
+            .putFloat(KEY_BUTTON_SCALE, normalized.display.buttonScale)
+            .putFloat(KEY_BUTTON_OPACITY, normalized.display.buttonOpacity)
+            .putString(KEY_COLOR_SCHEME, normalized.display.colorScheme.value)
+            .putInt(KEY_CUSTOM_RECORDING_COLOR, normalized.display.customPalette.recordingColor)
+            .putInt(KEY_CUSTOM_PAUSED_COLOR, normalized.display.customPalette.pausedColor)
+            .putInt(KEY_CUSTOM_PROCESSING_COLOR, normalized.display.customPalette.processingColor)
         secureApiKeyStore.stage(editor, apiKey.trim())
         // The settings and encrypted API Key must become durable as one transaction.
         check(editor.commit()) { "设置写入失败" }
@@ -100,6 +140,7 @@ class SettingsRepository(context: Context) {
         addAll(settings.audio.validate())
         addAll(settings.retry.validate())
         addAll(settings.interaction.validate())
+        addAll(settings.display.validate())
         if (settings.provider.baseUrl.isNotBlank()) {
             try {
                 BaseUrl.transcriptionEndpoint(settings.provider.baseUrl)
@@ -117,7 +158,7 @@ class SettingsRepository(context: Context) {
     fun exportJson(): String {
         val settings = get()
         val root = JSONObject()
-        root.put("schemaVersion", 1)
+        root.put("schemaVersion", 2)
         root.put(
             "audioOutput",
             JSONObject()
@@ -154,6 +195,20 @@ class SettingsRepository(context: Context) {
                 .put("doubleTapMs", settings.interaction.doubleTapMs)
                 .put("alwaysCopyToClipboard", settings.interaction.alwaysCopyToClipboard),
         )
+        root.put(
+            "display",
+            JSONObject()
+                .put("buttonScale", settings.display.buttonScale.toDouble())
+                .put("buttonOpacity", settings.display.buttonOpacity.toDouble())
+                .put("colorScheme", settings.display.colorScheme.value)
+                .put(
+                    "customColors",
+                    JSONObject()
+                        .put("recording", colorToHex(settings.display.customPalette.recordingColor))
+                        .put("paused", colorToHex(settings.display.customPalette.pausedColor))
+                        .put("processing", colorToHex(settings.display.customPalette.processingColor)),
+                ),
+        )
         return root.toString(2)
     }
 
@@ -163,7 +218,8 @@ class SettingsRepository(context: Context) {
         } catch (_: JSONException) {
             throw IllegalArgumentException("导入文件不是有效的 JSON 对象")
         }
-        if (requiredInt(root, "schemaVersion", "schemaVersion") != 1) {
+        val schemaVersion = requiredInt(root, "schemaVersion", "schemaVersion")
+        if (schemaVersion !in SUPPORTED_SCHEMA_VERSIONS) {
             throw IllegalArgumentException("不支持的配置 schemaVersion")
         }
 
@@ -171,6 +227,11 @@ class SettingsRepository(context: Context) {
         val providerObject = requiredObject(root, "openAICompatible", "openAICompatible")
         val retryObject = requiredObject(root, "retry", "retry")
         val interactionObject = requiredObject(root, "interaction", "interaction")
+        val display = if (schemaVersion >= 2) {
+            parseDisplay(requiredObject(root, "display", "display"))
+        } else {
+            DisplayConfig()
+        }
 
         if (requiredInt(audioObject, "channels", "audioOutput.channels") != 1) {
             throw IllegalArgumentException("audioOutput.channels 只能为 1")
@@ -228,6 +289,7 @@ class SettingsRepository(context: Context) {
                     default = true,
                 ),
             ),
+            display = display,
         )
 
         val errors = validate(imported)
@@ -309,6 +371,39 @@ class SettingsRepository(context: Context) {
         requiredValue(parent, key, path) as? Number
             ?: throw IllegalArgumentException("$path 必须是数字")
 
+    private fun parseDisplay(displayObject: JSONObject): DisplayConfig {
+        val colorSchemeValue = requiredString(displayObject, "colorScheme", "display.colorScheme")
+        val colorScheme = OverlayColorScheme.entries.find { it.value == colorSchemeValue }
+            ?: throw IllegalArgumentException("display.colorScheme 无效")
+        val customColors = requiredObject(displayObject, "customColors", "display.customColors")
+        return DisplayConfig(
+            buttonScale = requiredDouble(displayObject, "buttonScale", "display.buttonScale").toFloat(),
+            buttonOpacity = requiredDouble(
+                displayObject,
+                "buttonOpacity",
+                "display.buttonOpacity",
+            ).toFloat(),
+            colorScheme = colorScheme,
+            customPalette = OverlayPalette(
+                recordingColor = requiredRgbColor(customColors, "recording", "display.customColors.recording"),
+                pausedColor = requiredRgbColor(customColors, "paused", "display.customColors.paused"),
+                processingColor = requiredRgbColor(
+                    customColors,
+                    "processing",
+                    "display.customColors.processing",
+                ),
+            ),
+        )
+    }
+
+    private fun requiredRgbColor(parent: JSONObject, key: String, path: String): Int {
+        val value = requiredString(parent, key, path)
+        if (!RGB_HEX.matches(value)) throw IllegalArgumentException("$path 必须是 #RRGGBB")
+        return value.substring(1).toInt(16)
+    }
+
+    private fun colorToHex(color: Int): String = String.format(Locale.ROOT, "#%06X", color)
+
     private fun requiredValue(parent: JSONObject, key: String, path: String): Any {
         if (!parent.has(key)) throw IllegalArgumentException("缺少字段 $path")
         val value = parent.get(key)
@@ -345,7 +440,15 @@ class SettingsRepository(context: Context) {
         const val KEY_LONG_PRESS = "interaction.long_press"
         const val KEY_DOUBLE_TAP = "interaction.double_tap"
         const val KEY_ALWAYS_COPY_TO_CLIPBOARD = "interaction.always_copy_to_clipboard"
+        const val KEY_BUTTON_SCALE = "display.button_scale"
+        const val KEY_BUTTON_OPACITY = "display.button_opacity"
+        const val KEY_COLOR_SCHEME = "display.color_scheme"
+        const val KEY_CUSTOM_RECORDING_COLOR = "display.custom_recording_color"
+        const val KEY_CUSTOM_PAUSED_COLOR = "display.custom_paused_color"
+        const val KEY_CUSTOM_PROCESSING_COLOR = "display.custom_processing_color"
         const val KEY_OVERLAY_X = "overlay.x"
         const val KEY_OVERLAY_Y = "overlay.y"
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2)
+        val RGB_HEX = Regex("#[0-9A-Fa-f]{6}")
     }
 }

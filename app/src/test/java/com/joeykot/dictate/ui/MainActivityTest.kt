@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import com.joeykot.dictate.DictateApplication
@@ -87,9 +88,43 @@ class MainActivityTest {
 
             assertTrue(
                 waitUntil {
-                    preferences.getString(KEY_CONTAINER, null) == AudioContainer.OGG.name
+                    preferences.getString(KEY_CONTAINER, null) == AudioContainer.OGG.name &&
+                        preferences.getFloat(KEY_BUTTON_SCALE, -1f) == 1f &&
+                        preferences.getFloat(KEY_BUTTON_OPACITY, -1f) == 1f
                 },
             )
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun displaySectionProvidesSlidersAndCustomColorControls() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val activity = controller.get()
+            val root = activity.window.decorView
+            layout(root)
+            shadowOf(Looper.getMainLooper()).idle()
+
+            val scale = seekBarForLabel(root, "按钮大小")
+            scale.progress = 75
+            assertEquals("1.25×", findTextView(root, "1.25×")?.text?.toString())
+
+            val opacity = seekBarForLabel(root, "按钮不透明度")
+            opacity.progress = 20
+            assertEquals("50%", findTextView(root, "50%")?.text?.toString())
+
+            val scheme = spinnerForLabel(root, "色系搭配")
+            assertEquals("Custom", scheme.adapter.getItem(scheme.count - 1))
+            val recordingColor = findTextView(root, "录制颜色")
+                ?: throw AssertionError("找不到录制颜色设置项")
+            assertTrue(!recordingColor.isShown)
+
+            scheme.setSelection(scheme.count - 1)
+            layout(root)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue(recordingColor.isShown)
         } finally {
             controller.pause().stop().destroy()
         }
@@ -125,6 +160,23 @@ class MainActivityTest {
             .single()
     }
 
+    private fun seekBarForLabel(root: View, label: String): SeekBar {
+        val labelView = findTextView(root, label)
+            ?: throw AssertionError("找不到 $label 设置项")
+        val row = labelView.parent as? ViewGroup
+            ?: throw AssertionError("$label 设置项没有容器")
+        return findSeekBars(row).single()
+    }
+
+    private fun findSeekBars(root: View): List<SeekBar> = buildList {
+        if (root is SeekBar) add(root)
+        if (root is ViewGroup) {
+            for (index in 0 until root.childCount) {
+                addAll(findSeekBars(root.getChildAt(index)))
+            }
+        }
+    }
+
     private fun findTextView(root: View, text: String): TextView? {
         if (root is TextView && root.text.toString() == text) return root
         if (root !is ViewGroup) return null
@@ -151,5 +203,7 @@ class MainActivityTest {
         const val KEY_CODEC = "audio.codec"
         const val KEY_CONTAINER = "audio.container"
         const val KEY_BITRATE = "audio.bitrate"
+        const val KEY_BUTTON_SCALE = "display.button_scale"
+        const val KEY_BUTTON_OPACITY = "display.button_opacity"
     }
 }

@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import com.joeykot.dictate.job.VoiceJobController
+import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.model.JobState
 import com.joeykot.dictate.model.JobUiState
 import com.joeykot.dictate.settings.SettingsRepository
@@ -67,13 +68,20 @@ class OverlayButtonView(
     private var pendingTap: PendingTap? = null
     private var secondTapCandidate = false
     private var smoothedAmplitude = 0f
+    private var displayConfig = DisplayConfig()
 
     init {
         isFocusable = false
         isFocusableInTouchMode = false
         isClickable = true
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        elevation = density * 8f
+        updateElevation()
+    }
+
+    fun setDisplayConfig(config: DisplayConfig) {
+        displayConfig = config.normalized()
+        updateElevation()
+        invalidate()
     }
 
     fun setJobUiState(state: JobUiState) {
@@ -172,14 +180,15 @@ class OverlayButtonView(
         val radius = minOf(width, height) * 0.46f
         val now = SystemClock.uptimeMillis()
 
+        val palette = displayConfig.effectivePalette()
         val baseColor = when (jobUiState.state) {
             JobState.IDLE -> Color.rgb(95, 99, 104)
-            JobState.RECORDING -> Color.rgb(220, 38, 38)
-            JobState.PAUSED -> Color.rgb(22, 163, 74)
+            JobState.RECORDING -> rgb(palette.recordingColor)
+            JobState.PAUSED -> rgb(palette.pausedColor)
             JobState.TRANSCODING,
             JobState.REQUESTING,
             JobState.RETRY_WAITING,
-            -> Color.rgb(37, 99, 235)
+            -> rgb(palette.processingColor)
         }
         val processing = jobUiState.state in setOf(
             JobState.TRANSCODING,
@@ -197,9 +206,12 @@ class OverlayButtonView(
             else -> 240
         }
         circlePaint.color = baseColor
-        circlePaint.alpha = (alpha * breathing).toInt().coerceIn(0, 255)
+        circlePaint.alpha = (alpha * breathing * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
         circlePaint.style = Paint.Style.FILL
         canvas.drawCircle(centerX, centerY, radius * breathing, circlePaint)
+
+        symbolPaint.color = if (isLightColor(baseColor)) Color.rgb(32, 33, 36) else Color.WHITE
+        symbolPaint.alpha = 255
 
         when (jobUiState.state) {
             JobState.IDLE -> drawMicrophone(canvas, centerX, centerY, radius)
@@ -284,7 +296,7 @@ class OverlayButtonView(
 
     private fun drawMicrophone(canvas: Canvas, x: Float, y: Float, radius: Float) {
         symbolPaint.style = Paint.Style.STROKE
-        symbolPaint.strokeWidth = density * 2.7f
+        symbolPaint.strokeWidth = density * 2.7f * displayConfig.buttonScale
         val mic = RectF(x - radius * 0.22f, y - radius * 0.48f, x + radius * 0.22f, y + radius * 0.18f)
         canvas.drawRoundRect(mic, radius * 0.22f, radius * 0.22f, symbolPaint)
         canvas.drawArc(
@@ -300,7 +312,7 @@ class OverlayButtonView(
 
     private fun drawWaveform(canvas: Canvas, x: Float, y: Float, radius: Float, now: Long) {
         symbolPaint.style = Paint.Style.STROKE
-        symbolPaint.strokeWidth = density * 3f
+        symbolPaint.strokeWidth = density * 3f * displayConfig.buttonScale
         val animated = 0.18f + smoothedAmplitude.coerceAtLeast(0.04f) * 1.8f
         val spacing = radius * 0.28f
         for (index in -2..2) {
@@ -324,9 +336,26 @@ class OverlayButtonView(
 
     private fun drawProcessing(canvas: Canvas, x: Float, y: Float, radius: Float, breathing: Float) {
         symbolPaint.style = Paint.Style.STROKE
-        symbolPaint.strokeWidth = density * 3f
+        symbolPaint.strokeWidth = density * 3f * displayConfig.buttonScale
         symbolPaint.alpha = (200 + 55 * breathing).toInt().coerceIn(0, 255)
         canvas.drawCircle(x, y, radius * (0.25f + 0.16f * breathing), symbolPaint)
         symbolPaint.alpha = 255
+    }
+
+    private fun updateElevation() {
+        elevation = density * 8f * displayConfig.buttonScale
+    }
+
+    private fun rgb(color: Int): Int = Color.rgb(
+        (color shr 16) and 0xFF,
+        (color shr 8) and 0xFF,
+        color and 0xFF,
+    )
+
+    private fun isLightColor(color: Int): Boolean {
+        val red = Color.red(color)
+        val green = Color.green(color)
+        val blue = Color.blue(color)
+        return red * 299 + green * 587 + blue * 114 >= 160_000
     }
 }

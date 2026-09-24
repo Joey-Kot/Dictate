@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowManager
 import com.joeykot.dictate.accessibility.DictateAccessibilityService
+import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.job.VoiceJobController
 import com.joeykot.dictate.model.JobUiState
 import com.joeykot.dictate.settings.SettingsRepository
@@ -19,7 +20,8 @@ class OverlayController(
     private val settingsRepository: SettingsRepository,
 ) : OverlayButtonView.DragDelegate {
     private val windowManager = service.getSystemService(WindowManager::class.java)
-    private var sizePx = buttonSizePx()
+    private var displayConfig = settingsRepository.get().display
+    private var sizePx = buttonSizePx(displayConfig)
     private val layoutParams = WindowManager.LayoutParams(
         sizePx,
         sizePx,
@@ -40,6 +42,7 @@ class OverlayController(
     private var dragStartY = 0
 
     init {
+        view.setDisplayConfig(displayConfig)
         view.setOnApplyWindowInsetsListener { _, insets ->
             view.post {
                 if (shown) reclipAndPersistPosition()
@@ -50,6 +53,7 @@ class OverlayController(
 
     fun show() {
         if (shown) return
+        applyDisplayConfig(settingsRepository.get().display)
         val bounds = safeBounds()
         val saved = settingsRepository.getOverlayPosition()
         layoutParams.x = saved?.x ?: bounds.maxX
@@ -72,19 +76,20 @@ class OverlayController(
     }
 
     fun onConfigurationChanged() {
-        if (!shown) return
+        refreshAppearance()
+    }
+
+    fun refreshAppearance() {
+        if (!shown) {
+            applyDisplayConfig(settingsRepository.get().display)
+            return
+        }
         view.post {
             if (!shown) return@post
-            val newSize = buttonSizePx()
-            val sizeChanged = newSize != sizePx
-            if (sizeChanged) {
-                sizePx = newSize
-                layoutParams.width = sizePx
-                layoutParams.height = sizePx
-            }
+            val sizeChanged = applyDisplayConfig(settingsRepository.get().display)
             val positionChanged = clampPosition(safeBounds())
             if (sizeChanged || positionChanged) updateLayout()
-            persistPosition()
+            if (sizeChanged || positionChanged) persistPosition()
         }
     }
 
@@ -133,8 +138,19 @@ class OverlayController(
         settingsRepository.setOverlayPosition(layoutParams.x, layoutParams.y)
     }
 
-    private fun buttonSizePx(): Int {
-        return (64f * service.resources.displayMetrics.density).roundToInt()
+    private fun applyDisplayConfig(config: DisplayConfig): Boolean {
+        displayConfig = config.normalized()
+        view.setDisplayConfig(displayConfig)
+        val newSize = buttonSizePx(displayConfig)
+        if (newSize == sizePx) return false
+        sizePx = newSize
+        layoutParams.width = sizePx
+        layoutParams.height = sizePx
+        return true
+    }
+
+    private fun buttonSizePx(config: DisplayConfig): Int {
+        return (64f * service.resources.displayMetrics.density * config.buttonScale).roundToInt()
     }
 
     @Suppress("DEPRECATION")

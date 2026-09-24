@@ -34,6 +34,10 @@ class DictateAccessibilityService : AccessibilityService() {
         overlayController?.onConfigurationChanged()
     }
 
+    fun refreshOverlayAppearance() {
+        overlayController?.refreshAppearance()
+    }
+
     override fun onDestroy() {
         overlayController?.remove()
         overlayController = null
