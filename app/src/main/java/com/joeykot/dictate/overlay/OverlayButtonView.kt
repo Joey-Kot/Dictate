@@ -62,7 +62,6 @@ class OverlayButtonView(
     private var downState = JobState.IDLE
     private var downLongPressMs = 1_500L
     private var downDoubleTapMs = 500L
-    private var pressed = false
     private var dragging = false
     private var gestureCancelled = false
     private var pendingTap: PendingTap? = null
@@ -98,7 +97,6 @@ class OverlayButtonView(
         gestureCancelled = true
         if (dragging) dragDelegate.onDragFinished()
         dragging = false
-        pressed = false
         invalidate()
     }
 
@@ -114,7 +112,6 @@ class OverlayButtonView(
                 val interaction = settingsRepository.get().interaction
                 downLongPressMs = interaction.longPressMs
                 downDoubleTapMs = interaction.doubleTapMs
-                pressed = true
                 dragging = false
                 gestureCancelled = false
                 suspendPendingTapForSecondPress(event.eventTime, downState)
@@ -133,7 +130,6 @@ class OverlayButtonView(
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                pressed = false
                 if (dragging) {
                     dragging = false
                     dragDelegate.onDragFinished()
@@ -152,7 +148,6 @@ class OverlayButtonView(
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
-                pressed = false
                 gestureCancelled = true
                 cancelPendingTap()
                 if (dragging) dragDelegate.onDragFinished()
@@ -165,7 +160,6 @@ class OverlayButtonView(
                 cancelPendingTap()
                 if (dragging) dragDelegate.onDragFinished()
                 dragging = false
-                pressed = false
                 invalidate()
                 return true
             }
@@ -200,13 +194,9 @@ class OverlayButtonView(
         } else {
             1f
         }
-        val alpha = when {
-            pressed || dragging -> 245
-            jobUiState.state == JobState.IDLE -> 140
-            else -> 240
-        }
+        val stateOpacity = if (jobUiState.state == JobState.IDLE) 140f / 255f else 1f
         circlePaint.color = baseColor
-        circlePaint.alpha = (alpha * breathing * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
+        circlePaint.alpha = (255f * stateOpacity * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
         circlePaint.style = Paint.Style.FILL
         canvas.drawCircle(centerX, centerY, radius * breathing, circlePaint)
 
@@ -297,17 +287,41 @@ class OverlayButtonView(
     private fun drawMicrophone(canvas: Canvas, x: Float, y: Float, radius: Float) {
         symbolPaint.style = Paint.Style.STROKE
         symbolPaint.strokeWidth = density * 2.7f * displayConfig.buttonScale
-        val mic = RectF(x - radius * 0.22f, y - radius * 0.48f, x + radius * 0.22f, y + radius * 0.18f)
+        // The microphone's visible bounds extend farther below its drawing origin than above it.
+        // Raise the whole symbol by half of that difference so it is centered in the button.
+        val centeredY = y - radius * 0.11f
+        val mic = RectF(
+            x - radius * 0.22f,
+            centeredY - radius * 0.48f,
+            x + radius * 0.22f,
+            centeredY + radius * 0.18f,
+        )
         canvas.drawRoundRect(mic, radius * 0.22f, radius * 0.22f, symbolPaint)
         canvas.drawArc(
-            RectF(x - radius * 0.42f, y - radius * 0.15f, x + radius * 0.42f, y + radius * 0.46f),
+            RectF(
+                x - radius * 0.42f,
+                centeredY - radius * 0.15f,
+                x + radius * 0.42f,
+                centeredY + radius * 0.46f,
+            ),
             0f,
             180f,
             false,
             symbolPaint,
         )
-        canvas.drawLine(x, y + radius * 0.45f, x, y + radius * 0.7f, symbolPaint)
-        canvas.drawLine(x - radius * 0.23f, y + radius * 0.7f, x + radius * 0.23f, y + radius * 0.7f, symbolPaint)
+        val stemTop = centeredY + radius * 0.46f
+        val stemBottom = centeredY + radius * 0.7f
+        // A butt cap lets the stem meet the outer arc cleanly without a round bump inside it.
+        symbolPaint.strokeCap = Paint.Cap.BUTT
+        canvas.drawLine(x, stemTop, x, stemBottom, symbolPaint)
+        symbolPaint.strokeCap = Paint.Cap.ROUND
+        canvas.drawLine(
+            x - radius * 0.23f,
+            stemBottom,
+            x + radius * 0.23f,
+            stemBottom,
+            symbolPaint,
+        )
     }
 
     private fun drawWaveform(canvas: Canvas, x: Float, y: Float, radius: Float, now: Long) {
