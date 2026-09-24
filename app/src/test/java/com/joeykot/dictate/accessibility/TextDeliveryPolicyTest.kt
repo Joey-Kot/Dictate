@@ -7,14 +7,46 @@ import org.junit.Test
 class TextDeliveryPolicyTest {
     @Test
     fun enabledSettingAlwaysRequestsClipboardCopy() {
-        assertTrue(shouldCopyToClipboard(alwaysCopyToClipboard = true, inserted = true))
-        assertTrue(shouldCopyToClipboard(alwaysCopyToClipboard = true, inserted = false))
+        assertTrue(
+            shouldCopyToClipboard(
+                alwaysCopyToClipboard = true,
+                insertionState = TextInsertionState.CONFIRMED,
+            ),
+        )
+        assertTrue(
+            shouldCopyToClipboard(
+                alwaysCopyToClipboard = true,
+                insertionState = TextInsertionState.UNCONFIRMED,
+            ),
+        )
+        assertTrue(
+            shouldCopyToClipboard(
+                alwaysCopyToClipboard = true,
+                insertionState = TextInsertionState.FAILED,
+            ),
+        )
     }
 
     @Test
-    fun disabledSettingKeepsClipboardAsFailureFallback() {
-        assertFalse(shouldCopyToClipboard(alwaysCopyToClipboard = false, inserted = true))
-        assertTrue(shouldCopyToClipboard(alwaysCopyToClipboard = false, inserted = false))
+    fun disabledSettingKeepsClipboardForExplicitFailureOnly() {
+        assertFalse(
+            shouldCopyToClipboard(
+                alwaysCopyToClipboard = false,
+                insertionState = TextInsertionState.CONFIRMED,
+            ),
+        )
+        assertFalse(
+            shouldCopyToClipboard(
+                alwaysCopyToClipboard = false,
+                insertionState = TextInsertionState.UNCONFIRMED,
+            ),
+        )
+        assertTrue(
+            shouldCopyToClipboard(
+                alwaysCopyToClipboard = false,
+                insertionState = TextInsertionState.FAILED,
+            ),
+        )
     }
 
     @Test

@@ -372,7 +372,7 @@ class MainActivity : Activity() {
 
     private fun buildInteractionSection(): View = verticalGroup().apply {
         alwaysCopyToClipboard = Switch(this@MainActivity).apply {
-            text = "转写成功后始终复制到剪贴板（默认开启）"
+            text = "始终复制转写结果到剪贴板（默认开启）"
         }
         addView(alwaysCopyToClipboard)
         longPressInput = numericEditText()

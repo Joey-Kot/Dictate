@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/2be67e90-1639-4ceb-94db-c9c510f2d183
 - Embedded FFmpeg `n8.1`, Opus `1.5.2`, and LAME `3.100`, built from source for `arm64-v8a` only.
 - Opus, MP3, AAC, and PCM/WAV output with valid codec/container choices only.
 - Direct multipart requests to OpenAI-compatible `/v1/audio/transcriptions`; success requires a non-empty top-level JSON string `text`.
-- Current-focus insertion plus a configurable clipboard safety copy, enabled by default; when disabled, clipboard remains the insertion-failure fallback.
+- Current-focus insertion plus a configurable clipboard safety copy, enabled by default; when disabled, clipboard is used only after an explicit insertion failure.
 - Cancellable FFmpeg process, HTTP request, and exponential retry wait, all protected by a monotonically increasing task ID.
 - Keystore-backed API Key encryption, redacted diagnostics, real endpoint test, and validated JSON import/export.
 
@@ -50,7 +50,7 @@ flowchart LR
   W -->|"Android 8–12<br/>or confirmed-failure fallback"| S["ACTION_SET_TEXT<br/>hint normalization"]
   M --> X["Current editor"]
   S --> X
-  T -->|"default: always copy; fallback on failed or unconfirmed"| I["Clipboard"]
+  T -->|"always copy enabled<br/>or direct insertion explicitly failed"| I["Clipboard"]
   I -->|"direct insertion explicitly failed"| P["ACTION_PASTE"]
   P --> X
   J["Settings"] --> K["Preferences + Keystore"]
@@ -99,7 +99,7 @@ sequenceDiagram
     else Explicitly not applied
       A->>E: ACTION_SET_TEXT
     else Unconfirmed
-      Note over A,E: Do not retry directly to avoid duplicate insertion
+      Note over A,E: Do not retry or use the clipboard fallback<br/>when always-copy is off, to avoid duplicate insertion
     end
 
   else Android 8 to 12
@@ -108,7 +108,7 @@ sequenceDiagram
 
   A-->>D: Confirmed, failed, or unconfirmed
 
-  opt Always copy by default, or insertion failed or unconfirmed
+  opt Always copy enabled, or direct insertion explicitly failed
     D->>C: Copy transcription
   end
 
@@ -145,7 +145,8 @@ stateDiagram-v2
   RetryWaiting --> Idle: cancel/keep raw
   note right of Requesting
     Includes HTTP request, insertion verification,
-    clipboard copy, and paste fallback
+    always-copy safety copy, or explicit-failure
+    clipboard and paste fallback
   end note
 ```
 
@@ -195,7 +196,7 @@ GitHub Actions is the default release path. Pushes to `main` and `dev`, plus man
 4. Run the real endpoint test, which transcodes an embedded short spoken clip with current audio settings and calls the transcription endpoint—not `/v1/models`.
 5. Optionally set the floating button's size, opacity, and a preset or custom three-state color scheme; then save, keep a cursor in an ordinary editable field, and use the floating button.
 
-The clipboard safety copy is enabled by default. Turning it off restores fallback-only behavior: Dictate copies only when current-focus insertion fails.
+The clipboard safety copy is enabled by default. Turning it off restores fallback-only behavior: Dictate copies only when current-focus insertion explicitly fails. An unconfirmed insertion is never retried or copied automatically in that mode, because it may still have reached the editor.
 
 Use HTTPS. Audio goes directly to the configured Base URL. Dictate provides no API, proxy, account system, or storage of user API traffic. API Keys are encrypted with an AES key held by Android Keystore and omitted from exports by default; importing one requires explicit confirmation.
 

@@ -58,7 +58,7 @@ internal object TextDelivery {
     ) {
         if (!shouldContinue()) return
         var finalInsertion = insertion
-        val copyAttempted = shouldCopyToClipboard(alwaysCopyToClipboard, insertion.inserted)
+        val copyAttempted = shouldCopyToClipboard(alwaysCopyToClipboard, insertion.state)
         val copied = copyAttempted && ClipboardFallback.copy(context, text)
         val serviceAvailable = service != null && DictateAccessibilityService.current() === service
         if (
@@ -74,8 +74,10 @@ internal object TextDelivery {
     }
 }
 
-internal fun shouldCopyToClipboard(alwaysCopyToClipboard: Boolean, inserted: Boolean): Boolean =
-    alwaysCopyToClipboard || !inserted
+internal fun shouldCopyToClipboard(
+    alwaysCopyToClipboard: Boolean,
+    insertionState: TextInsertionState,
+): Boolean = alwaysCopyToClipboard || insertionState == TextInsertionState.FAILED
 
 internal fun shouldTryPasteFallback(
     directInsertionFailed: Boolean,

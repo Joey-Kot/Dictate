@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/2be67e90-1639-4ceb-94db-c9c510f2d183
 - 从源码构建 FFmpeg `n8.1`、Opus `1.5.2`、LAME `3.100`，只支持 `arm64-v8a`。
 - 支持 Opus、MP3、AAC、PCM/WAV，只展示有效编码与容器组合。
 - 直接 multipart 请求 OpenAI Compatible `/v1/audio/transcriptions`；成功响应必须含顶层非空字符串 `text`。
-- 写入完成时的当前焦点，并默认始终保留剪贴板副本；关闭该开关后，剪贴板恢复为写入失败时的兜底。
+- 写入完成时的当前焦点，并默认始终保留剪贴板副本；关闭该开关后，只有明确写入失败才使用剪贴板兜底。
 - FFmpeg、HTTP 和指数退避等待均可取消，所有回调受递增任务 ID 保护。
 - Keystore 支持的 API Key 加密、脱敏诊断、真实端点测试、完整校验的 JSON 导入导出。
 
@@ -50,7 +50,7 @@ flowchart LR
   W -->|"Android 8–12<br/>或明确失败回退"| S["ACTION_SET_TEXT<br/>占位符归一化"]
   M --> X["当前编辑器"]
   S --> X
-  T -->|"默认始终复制；失败或无法确认时兜底"| I["剪贴板"]
+  T -->|"开启始终复制<br/>或直接写入明确失败"| I["剪贴板"]
   I -->|"直接写入明确失败"| P["ACTION_PASTE"]
   P --> X
   J["配置页"] --> K["Preferences + Keystore"]
@@ -93,13 +93,13 @@ sequenceDiagram
     else 明确未写入
       A->>E: ACTION_SET_TEXT
     else 无法确认
-      Note over A,E: 不直接重试，避免重复插入
+      Note over A,E: 关闭始终复制时不重试或走剪贴板兜底，避免重复插入
     end
   else Android 8–12
     A->>E: ACTION_SET_TEXT（忽略显示中的占位符）
   end
   A-->>D: confirmed / failed / unconfirmed
-  opt 默认始终复制，或写入失败/无法确认
+  opt 开启始终复制，或直接写入明确失败
     D->>C: 复制转写文本
   end
   opt 直接写入明确失败且复制成功
@@ -134,7 +134,8 @@ stateDiagram-v2
   重试等待中 --> 空闲: 取消并保留原始录音
   note right of 请求中
     包含 HTTP 请求、写入验证、
-    剪贴板复制与粘贴兜底
+    始终复制副本，或明确失败时的
+    剪贴板与粘贴兜底
   end note
 ```
 
@@ -184,7 +185,7 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 4. 执行真实端点测试；应用按当前音频设置转码内置短语音并调用转写端点，不使用 `/v1/models`。
 5. 可选配置悬浮按钮大小、不透明度，以及预置或 Custom 三状态色系；保存配置后，在普通可编辑输入框中保留光标并使用悬浮按钮。
 
-“始终复制到剪贴板”默认开启。关闭后恢复为仅兜底模式：只有当前焦点写入失败时才复制。
+“始终复制到剪贴板”默认开启。关闭后恢复为仅兜底模式：只有当前焦点明确写入失败时才复制。无法确认写入结果时，不会自动重试或复制，因为文本仍可能已写入编辑器。
 
 应使用 HTTPS。音频直接发送到配置的 Base URL；Dictate 不提供 API、代理、账号系统，也不保存用户 API 流量。API Key 使用 Android Keystore 中的 AES 密钥加密，默认导出不含密钥；导入密钥需要明确确认。
 

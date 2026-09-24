@@ -521,20 +521,29 @@ class VoiceJobController(
         val insertionSummary = outcome.insertion.diagnosticSummary()
         when {
             outcome.insertion.unconfirmed && outcome.copied -> {
-                diagnostics.error(
+                diagnostics.info(
                     "delivery",
                     "job=$jobId insertion could not be confirmed; copied to clipboard $insertionSummary",
                 )
                 showToast("已尝试写入当前焦点，但无法确认；转写结果已复制到剪贴板")
                 completeJob(jobId)
             }
-            outcome.insertion.unconfirmed -> {
+            outcome.insertion.unconfirmed && outcome.copyAttempted -> {
                 diagnostics.error(
                     "delivery",
                     "job=$jobId insertion could not be confirmed and clipboard copy failed " +
                         insertionSummary,
                 )
                 showToast("已尝试写入当前焦点，但无法确认，且复制到剪贴板失败")
+                completeJob(jobId)
+            }
+            outcome.insertion.unconfirmed -> {
+                diagnostics.info(
+                    "delivery",
+                    "job=$jobId insertion could not be confirmed; clipboard copy not requested " +
+                        insertionSummary,
+                )
+                showToast("已尝试写入当前焦点，但无法确认结果")
                 completeJob(jobId)
             }
             outcome.inserted && outcome.copied -> {
