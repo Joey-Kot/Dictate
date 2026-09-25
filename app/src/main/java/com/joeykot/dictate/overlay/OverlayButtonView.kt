@@ -5,9 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RadialGradient
 import android.graphics.RectF
-import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -198,14 +196,10 @@ class OverlayButtonView(
         }
         val stateOpacity = if (jobUiState.state == JobState.IDLE) 140f / 255f else 1f
         circlePaint.style = Paint.Style.FILL
-        if (processing) {
-            drawProcessingBackground(canvas, centerX, centerY, radius * breathing, baseColor)
-        } else {
-            circlePaint.shader = null
-            circlePaint.color = baseColor
-            circlePaint.alpha = (255f * stateOpacity * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
-            canvas.drawCircle(centerX, centerY, radius, circlePaint)
-        }
+        circlePaint.shader = null
+        circlePaint.color = baseColor
+        circlePaint.alpha = (255f * stateOpacity * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
+        canvas.drawCircle(centerX, centerY, radius * breathing, circlePaint)
 
         symbolPaint.color = if (isLightColor(baseColor)) Color.rgb(32, 33, 36) else Color.WHITE
         symbolPaint.alpha = 255
@@ -353,26 +347,6 @@ class OverlayButtonView(
         val bottom = y + radius * 0.52f
         canvas.drawRoundRect(RectF(x - gap - width, top, x - gap, bottom), width / 3, width / 3, symbolPaint)
         canvas.drawRoundRect(RectF(x + gap, top, x + gap + width, bottom), width / 3, width / 3, symbolPaint)
-    }
-
-    private fun drawProcessingBackground(canvas: Canvas, x: Float, y: Float, radius: Float, color: Int) {
-        val alpha = (255f * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
-        val red = Color.red(color)
-        val green = Color.green(color)
-        val blue = Color.blue(color)
-        val visibleColor = Color.argb(alpha, red, green, blue)
-        val transparentColor = Color.argb(0, red, green, blue)
-        circlePaint.shader = RadialGradient(
-            x,
-            y,
-            radius,
-            intArrayOf(visibleColor, visibleColor, transparentColor),
-            floatArrayOf(0f, 0.9f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        circlePaint.alpha = 255
-        canvas.drawCircle(x, y, radius, circlePaint)
-        circlePaint.shader = null
     }
 
     private fun drawProcessing(canvas: Canvas, x: Float, y: Float, radius: Float) {
