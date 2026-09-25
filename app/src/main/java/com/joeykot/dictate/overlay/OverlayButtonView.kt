@@ -5,7 +5,9 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -195,10 +197,15 @@ class OverlayButtonView(
             1f
         }
         val stateOpacity = if (jobUiState.state == JobState.IDLE) 140f / 255f else 1f
-        circlePaint.color = baseColor
-        circlePaint.alpha = (255f * stateOpacity * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
         circlePaint.style = Paint.Style.FILL
-        canvas.drawCircle(centerX, centerY, radius * breathing, circlePaint)
+        if (processing) {
+            drawProcessingBackground(canvas, centerX, centerY, radius * breathing, baseColor)
+        } else {
+            circlePaint.shader = null
+            circlePaint.color = baseColor
+            circlePaint.alpha = (255f * stateOpacity * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
+            canvas.drawCircle(centerX, centerY, radius, circlePaint)
+        }
 
         symbolPaint.color = if (isLightColor(baseColor)) Color.rgb(32, 33, 36) else Color.WHITE
         symbolPaint.alpha = 255
@@ -210,7 +217,7 @@ class OverlayButtonView(
             JobState.TRANSCODING,
             JobState.REQUESTING,
             JobState.RETRY_WAITING,
-            -> drawProcessing(canvas, centerX, centerY, radius, breathing)
+            -> drawProcessing(canvas, centerX, centerY, radius)
         }
 
         if (jobUiState.state == JobState.RECORDING || processing) postInvalidateOnAnimation()
@@ -348,12 +355,31 @@ class OverlayButtonView(
         canvas.drawRoundRect(RectF(x + gap, top, x + gap + width, bottom), width / 3, width / 3, symbolPaint)
     }
 
-    private fun drawProcessing(canvas: Canvas, x: Float, y: Float, radius: Float, breathing: Float) {
+    private fun drawProcessingBackground(canvas: Canvas, x: Float, y: Float, radius: Float, color: Int) {
+        val alpha = (255f * displayConfig.buttonOpacity).toInt().coerceIn(0, 255)
+        val red = Color.red(color)
+        val green = Color.green(color)
+        val blue = Color.blue(color)
+        val visibleColor = Color.argb(alpha, red, green, blue)
+        val transparentColor = Color.argb(0, red, green, blue)
+        circlePaint.shader = RadialGradient(
+            x,
+            y,
+            radius,
+            intArrayOf(visibleColor, visibleColor, transparentColor),
+            floatArrayOf(0f, 0.9f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        circlePaint.alpha = 255
+        canvas.drawCircle(x, y, radius, circlePaint)
+        circlePaint.shader = null
+    }
+
+    private fun drawProcessing(canvas: Canvas, x: Float, y: Float, radius: Float) {
         symbolPaint.style = Paint.Style.STROKE
         symbolPaint.strokeWidth = density * 3f * displayConfig.buttonScale
-        symbolPaint.alpha = (200 + 55 * breathing).toInt().coerceIn(0, 255)
-        canvas.drawCircle(x, y, radius * (0.25f + 0.16f * breathing), symbolPaint)
         symbolPaint.alpha = 255
+        canvas.drawCircle(x, y, radius * 0.4f, symbolPaint)
     }
 
     private fun updateElevation() {
