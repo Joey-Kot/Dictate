@@ -34,10 +34,22 @@ class SettingsRepository(context: Context) {
             preferences.getString(KEY_CONTAINER, null),
             AudioConfig.defaultContainer(codec),
         )
+        val storedSampleRate = preferences.getInt(KEY_SAMPLE_RATE, AudioConfig.DEFAULT_SAMPLE_RATE)
+        val sampleRate = if (
+            !preferences.getBoolean(KEY_SAMPLE_RATE_SELECTION_IS_CURRENT, false) &&
+            preferences.contains(KEY_SAMPLE_RATE) &&
+            storedSampleRate == LEGACY_DEFAULT_SAMPLE_RATE
+        ) {
+            // Older releases persisted their 16 kHz default. Treat it as the new automatic
+            // default until the user explicitly saves an output-rate selection in this release.
+            AudioConfig.AUTO_SAMPLE_RATE
+        } else {
+            storedSampleRate
+        }
         return AppSettings(
             audio = AudioConfig(
                 bitDepth = preferences.getInt(KEY_BIT_DEPTH, AudioConfig.DEFAULT_BIT_DEPTH),
-                sampleRate = preferences.getInt(KEY_SAMPLE_RATE, AudioConfig.DEFAULT_SAMPLE_RATE),
+                sampleRate = sampleRate,
                 codec = codec,
                 container = container,
                 bitrateKbps = preferences.getInt(KEY_BITRATE, AudioConfig.DEFAULT_BITRATE_KBPS),
@@ -109,6 +121,7 @@ class SettingsRepository(context: Context) {
         val editor = preferences.edit()
             .putInt(KEY_BIT_DEPTH, normalized.audio.bitDepth)
             .putInt(KEY_SAMPLE_RATE, normalized.audio.sampleRate)
+            .putBoolean(KEY_SAMPLE_RATE_SELECTION_IS_CURRENT, true)
             .putString(KEY_CODEC, normalized.audio.codec.name)
             .putString(KEY_CONTAINER, normalized.audio.container.name)
             .putInt(KEY_BITRATE, normalized.audio.bitrateKbps)
@@ -158,7 +171,7 @@ class SettingsRepository(context: Context) {
     fun exportJson(): String {
         val settings = get()
         val root = JSONObject()
-        root.put("schemaVersion", 2)
+        root.put("schemaVersion", 3)
         root.put(
             "audioOutput",
             JSONObject()
@@ -428,6 +441,7 @@ class SettingsRepository(context: Context) {
         const val PREFS_NAME = "settings"
         const val KEY_BIT_DEPTH = "audio.bit_depth"
         const val KEY_SAMPLE_RATE = "audio.sample_rate"
+        const val KEY_SAMPLE_RATE_SELECTION_IS_CURRENT = "audio.sample_rate_selection_is_current"
         const val KEY_CODEC = "audio.codec"
         const val KEY_CONTAINER = "audio.container"
         const val KEY_BITRATE = "audio.bitrate"
@@ -448,7 +462,8 @@ class SettingsRepository(context: Context) {
         const val KEY_CUSTOM_PROCESSING_COLOR = "display.custom_processing_color"
         const val KEY_OVERLAY_X = "overlay.x"
         const val KEY_OVERLAY_Y = "overlay.y"
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2)
+        const val LEGACY_DEFAULT_SAMPLE_RATE = 16_000
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3)
         val RGB_HEX = Regex("#[0-9A-Fa-f]{6}")
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.AudioContainer
+import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.util.Diagnostics
 import java.io.File
 import java.util.Collections
@@ -22,7 +23,13 @@ class AudioTranscoder(
     private val activeProcesses = ConcurrentHashMap<Long, Process>()
     private val cancelledJobs = Collections.newSetFromMap(ConcurrentHashMap<Long, Boolean>())
 
-    fun transcode(jobId: Long, rawInput: File, output: File, config: AudioConfig): Result {
+    fun transcode(
+        jobId: Long,
+        rawInput: File,
+        inputFormat: Pcm16Format,
+        output: File,
+        config: AudioConfig,
+    ): Result {
         if (cancelledJobs.remove(jobId)) return Result.Cancelled
         if (!rawInput.isFile || rawInput.length() == 0L) {
             return Result.Failure("原始录音文件不存在或为空")
@@ -35,12 +42,20 @@ class AudioTranscoder(
 
         output.parentFile?.mkdirs()
         output.delete()
-        val normalized = config.normalized()
+        val normalized = config.resolvedForInput(inputFormat.sampleRateHz)
         val effectiveRate = effectiveSampleRate(normalized)
-        val command = buildCommand(executable, rawInput, output, normalized, effectiveRate)
+        val command = buildCommand(
+            executable,
+            rawInput,
+            inputFormat,
+            output,
+            normalized,
+            effectiveRate,
+        )
         diagnostics.info(
             "ffmpeg",
             "job=$jobId codec=${normalized.codec.value} container=${normalized.container.value} " +
+                "input=${inputFormat.summary()} requestedSampleRate=${config.sampleRate} " +
                 "sampleRate=${normalized.sampleRate} effectiveRate=$effectiveRate " +
                 "bitDepth=${normalized.bitDepth} bitrate=${normalized.bitrateKbps}k",
         )
@@ -104,13 +119,20 @@ class AudioTranscoder(
     private fun buildCommand(
         executable: File,
         input: File,
+        inputFormat: Pcm16Format,
         output: File,
         config: AudioConfig,
         effectiveRate: Int,
     ): List<String> = buildList {
         add(executable.absolutePath)
         addAll(listOf("-hide_banner", "-nostdin", "-y"))
-        addAll(listOf("-f", "s16le", "-ar", AudioConfig.INPUT_SAMPLE_RATE.toString(), "-ac", "1"))
+        addAll(
+            listOf(
+                "-f", "s16le",
+                "-ar", inputFormat.sampleRateHz.toString(),
+                "-ac", inputFormat.channelCount.toString(),
+            ),
+        )
         addAll(listOf("-i", input.absolutePath, "-vn", "-ac", "1", "-ar", effectiveRate.toString()))
 
         when (config.codec) {

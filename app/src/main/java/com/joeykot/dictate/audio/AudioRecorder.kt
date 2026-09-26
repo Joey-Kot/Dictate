@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import com.joeykot.dictate.model.AudioConfig
+import com.joeykot.dictate.model.Pcm16Format
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -17,7 +17,7 @@ class AudioRecorder(
     private val callback: Callback,
 ) {
     interface Callback {
-        fun onStarted(source: Int)
+        fun onStarted(source: Int, format: Pcm16Format)
         fun onAmplitude(amplitude: Float)
         fun onCompleted(file: File, valid: Boolean, discarded: Boolean)
         fun onFailed(message: String, file: File, valid: Boolean)
@@ -39,6 +39,9 @@ class AudioRecorder(
     private var audioRecord: AudioRecord? = null
 
     @Volatile
+    private var captureFormat: Pcm16Format? = null
+
+    @Volatile
     private var bytesWritten = 0L
 
     @Volatile
@@ -57,10 +60,11 @@ class AudioRecorder(
             return
         }
 
-        val (record, source, bufferSize) = initialized
+        val (record, source, bufferSize, format) = initialized
         audioRecord = record
+        captureFormat = format
         running = true
-        callback.onStarted(source)
+        callback.onStarted(source, format)
         captureThread = Thread(
             { captureLoop(record, bufferSize) },
             "dictate-audio-capture",
@@ -123,6 +127,9 @@ class AudioRecorder(
 
     fun audioSessionId(): Int = audioRecord?.audioSessionId ?: AudioRecord.ERROR
 
+    /** The PCM format of bytes already written to [outputFile], if recording started. */
+    fun captureFormat(): Pcm16Format? = captureFormat
+
     private fun captureLoop(record: AudioRecord, bufferSize: Int) {
         val buffer = ByteArray(bufferSize)
         try {
@@ -165,7 +172,7 @@ class AudioRecorder(
         if (discardOnFinish) outputFile.delete()
         callback.onCompleted(
             outputFile,
-            !discardOnFinish && bytesWritten >= MIN_VALID_BYTES,
+            !discardOnFinish && hasMinimumAudio(),
             discardOnFinish,
         )
     }
@@ -178,7 +185,7 @@ class AudioRecorder(
             stateLock.notifyAll()
         }
         releaseRecord()
-        callback.onFailed(message, outputFile, bytesWritten >= MIN_VALID_BYTES)
+        callback.onFailed(message, outputFile, hasMinimumAudio())
     }
 
     private fun releaseRecord() {
@@ -189,26 +196,19 @@ class AudioRecorder(
     }
 
     @SuppressLint("MissingPermission")
-    private fun createStartedAudioRecord(): Triple<AudioRecord, Int, Int>? {
+    private fun createStartedAudioRecord(): InitializedAudioRecord? {
+        // Do not set a sample rate here. Android then selects a route-dependent input rate, which
+        // avoids forcing a 48 kHz USB microphone through an unnecessary 16 kHz client stream.
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(AudioConfig.INPUT_SAMPLE_RATE)
             .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
             .build()
-        val minimum = AudioRecord.getMinBufferSize(
-            AudioConfig.INPUT_SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        )
-        if (minimum <= 0) return null
-        val bufferSize = maxOf(minimum * 2, AudioConfig.INPUT_SAMPLE_RATE)
 
         for (source in listOf(MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.MIC)) {
             val record = try {
                 AudioRecord.Builder()
                     .setAudioSource(source)
                     .setAudioFormat(format)
-                    .setBufferSizeInBytes(bufferSize)
                     .build()
             } catch (_: Exception) {
                 null
@@ -217,7 +217,16 @@ class AudioRecorder(
                 try {
                     record.startRecording()
                     if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                        return Triple(record, source, bufferSize)
+                        val pcmFormat = Pcm16Format(
+                            sampleRateHz = record.sampleRate,
+                            channelCount = record.channelCount,
+                        )
+                        val nativeBufferBytes = record.bufferSizeInFrames.toLong() * pcmFormat.bytesPerFrame
+                        val readBufferBytes = maxOf(
+                            nativeBufferBytes,
+                            pcmFormat.bytesPerSecond / READS_PER_SECOND,
+                        ).coerceAtMost(MAX_READ_BUFFER_BYTES.toLong()).toInt()
+                        return InitializedAudioRecord(record, source, readBufferBytes, pcmFormat)
                     }
                 } catch (_: Exception) {
                     // Fall through to MIC when VOICE_RECOGNITION cannot actually start.
@@ -227,6 +236,10 @@ class AudioRecorder(
         }
         return null
     }
+
+    private fun hasMinimumAudio(): Boolean = captureFormat
+        ?.let { bytesWritten >= it.minimumBytesFor(MIN_VALID_DURATION_MILLIS) }
+        ?: false
 
     private fun calculateAmplitude(buffer: ByteArray, length: Int): Float {
         var sum = 0.0
@@ -243,6 +256,15 @@ class AudioRecorder(
     }
 
     private companion object {
-        const val MIN_VALID_BYTES = 3_200L
+        const val MIN_VALID_DURATION_MILLIS = 100L
+        const val READS_PER_SECOND = 4L
+        const val MAX_READ_BUFFER_BYTES = 1_048_576
     }
+
+    private data class InitializedAudioRecord(
+        val record: AudioRecord,
+        val source: Int,
+        val bufferSize: Int,
+        val format: Pcm16Format,
+    )
 }

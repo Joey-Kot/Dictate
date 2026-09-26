@@ -2,6 +2,7 @@ package com.joeykot.dictate.settings
 
 import android.content.Context
 import com.joeykot.dictate.model.AppSettings
+import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.model.OverlayColorScheme
 import com.joeykot.dictate.model.OverlayPalette
@@ -62,10 +63,26 @@ class SettingsRepositoryDisplayTest {
 
         assertEquals(expected, repository.get().display)
         val exported = JSONObject(repository.exportJson())
-        assertEquals(2, exported.getInt("schemaVersion"))
+        assertEquals(3, exported.getInt("schemaVersion"))
         assertEquals(0.47, exported.getJSONObject("display").getDouble("buttonOpacity"), 0.0001)
         assertEquals("#123456", exported.getJSONObject("display").getJSONObject("customColors").getString("recording"))
         assertEquals(expected, repository.previewImport(exported.toString()).settings.display)
+    }
+
+    @Test
+    fun legacySavedDefaultSampleRateMigratesToAutomaticOutput() {
+        val preferences = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        preferences.edit().putInt(KEY_SAMPLE_RATE, LEGACY_DEFAULT_SAMPLE_RATE).commit()
+        val repository = SettingsRepository(context)
+
+        assertEquals(AudioConfig.AUTO_SAMPLE_RATE, repository.get().audio.sampleRate)
+
+        saveInBackground(
+            repository,
+            AppSettings(audio = AudioConfig(sampleRate = LEGACY_DEFAULT_SAMPLE_RATE)),
+        )
+
+        assertEquals(LEGACY_DEFAULT_SAMPLE_RATE, repository.get().audio.sampleRate)
     }
 
     @Test
@@ -114,5 +131,7 @@ class SettingsRepositoryDisplayTest {
     private companion object {
         const val SETTINGS_PREFS = "settings"
         const val LEGACY_SECURE_PREFS = "secure_settings"
+        const val KEY_SAMPLE_RATE = "audio.sample_rate"
+        const val LEGACY_DEFAULT_SAMPLE_RATE = 16_000
     }
 }

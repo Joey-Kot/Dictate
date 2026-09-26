@@ -12,6 +12,7 @@ import com.joeykot.dictate.audio.AudioTranscoder
 import com.joeykot.dictate.audio.RecordingService
 import com.joeykot.dictate.model.JobState
 import com.joeykot.dictate.model.JobUiState
+import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.model.RuntimeSettings
 import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
@@ -57,6 +58,7 @@ class VoiceJobController(
         val mode: JobMode,
         var rawFile: File,
         var runtimeSettings: RuntimeSettings?,
+        var rawFormat: Pcm16Format? = null,
         var outputFile: File? = null,
         var recordingClosed: Boolean = false,
         var retryCount: Int = 0,
@@ -171,6 +173,7 @@ class VoiceJobController(
             id = jobId,
             mode = JobMode.CONNECTION_TEST,
             rawFile = rawFile,
+            rawFormat = Pcm16Format.LEGACY_MONO_16_KHZ,
             runtimeSettings = runtimeSettings,
             recordingClosed = true,
             testCallback = callback,
@@ -198,10 +201,11 @@ class VoiceJobController(
         return true
     }
 
-    fun onRecordingStarted(jobId: Long) {
+    fun onRecordingStarted(jobId: Long, format: Pcm16Format) {
         mainHandler.post {
-            if (!isCurrent(jobId)) return@post
-            diagnostics.info("recording", "job=$jobId started")
+            val job = activeJob?.takeIf { it.id == jobId } ?: return@post
+            job.rawFormat = format
+            diagnostics.info("recording", "job=$jobId started format=${format.summary()}")
         }
     }
 
@@ -221,15 +225,17 @@ class VoiceJobController(
         valid: Boolean,
         discarded: Boolean,
         unexpected: Boolean,
+        format: Pcm16Format?,
     ) {
         mainHandler.post {
             if (pendingPreserveAfterRecorderStops.remove(jobId)) {
-                if (valid && !discarded) promoteRecording(jobId, file) else file.delete()
+                if (valid && !discarded) promoteRecording(jobId, file, format) else file.delete()
                 return@post
             }
             val job = activeJob
             if (job?.id != jobId) return@post
             job.recordingClosed = true
+            job.rawFormat = format
 
             if (discarded) {
                 file.delete()
@@ -242,12 +248,16 @@ class VoiceJobController(
                 return@post
             }
 
-            val promoted = promoteRecording(jobId, file)
+            val promoted = promoteRecording(jobId, file, format)
             if (promoted == null) {
-                finishFailure(jobId, "无法保存本次录音")
+                finishFailure(
+                    jobId,
+                    if (format == null) "缺少本次录音的 PCM 格式" else "无法保存本次录音",
+                )
                 return@post
             }
-            job.rawFile = promoted
+            job.rawFile = promoted.file
+            job.rawFormat = promoted.format
 
             if (unexpected) {
                 finishFailure(jobId, "录音服务意外终止，已保留可用录音")
@@ -262,14 +272,20 @@ class VoiceJobController(
         }
     }
 
-    fun onRecordingFailed(jobId: Long, file: File, valid: Boolean, message: String) {
+    fun onRecordingFailed(
+        jobId: Long,
+        file: File,
+        valid: Boolean,
+        message: String,
+        format: Pcm16Format?,
+    ) {
         mainHandler.post {
             if (pendingPreserveAfterRecorderStops.remove(jobId)) {
-                if (valid) promoteRecording(jobId, file) else file.delete()
+                if (valid) promoteRecording(jobId, file, format) else file.delete()
                 return@post
             }
             if (!isCurrent(jobId)) return@post
-            if (valid) promoteRecording(jobId, file) else file.delete()
+            if (valid) promoteRecording(jobId, file, format) else file.delete()
             finishFailure(jobId, message)
         }
     }
@@ -353,7 +369,8 @@ class VoiceJobController(
 
     private fun resendLastRecording() {
         if (activeJob != null) return
-        if (!fileStore.hasLastRecording()) {
+        val lastRecording = fileStore.lastRecording()
+        if (lastRecording == null) {
             showToast("没有可重发的上一条录音")
             return
         }
@@ -362,7 +379,8 @@ class VoiceJobController(
         activeJob = ActiveJob(
             id = jobId,
             mode = JobMode.VOICE,
-            rawFile = fileStore.lastRecordingFile,
+            rawFile = lastRecording.file,
+            rawFormat = lastRecording.format,
             runtimeSettings = runtime,
             recordingClosed = true,
         )
@@ -374,6 +392,10 @@ class VoiceJobController(
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         val runtime = job.runtimeSettings ?: run {
             finishFailure(jobId, "缺少转写设置")
+            return
+        }
+        val rawFormat = job.rawFormat ?: run {
+            finishFailure(jobId, "缺少原始录音格式")
             return
         }
         val validationError = validateRuntimeSettings(runtime)
@@ -388,7 +410,7 @@ class VoiceJobController(
         updateUi(jobId, JobUiState(JobState.TRANSCODING, "正在转码为 ${audio.container.value.uppercase()}"))
         job.workerFuture = worker.submit {
             if (!isCurrent(jobId)) return@submit
-            val result = transcoder.transcode(jobId, job.rawFile, output, audio)
+            val result = transcoder.transcode(jobId, job.rawFile, rawFormat, output, audio)
             mainHandler.post {
                 if (!isCurrent(jobId)) return@post
                 when (result) {
@@ -611,19 +633,19 @@ class VoiceJobController(
                         application.startService(RecordingService.stopIntent(application, job.id))
                     }.isSuccess
                     if (!delivered) application.stopService(recordingServiceIntent)
-                } else if (job.mode == JobMode.VOICE && fileStore.isValidRaw(job.rawFile)) {
-                    promoteRecording(job.id, job.rawFile)
+                } else if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
+                    promoteRecording(job.id, job.rawFile, job.rawFormat)
                 }
             }
             JobState.REQUESTING -> {
                 client.cancel(job.id)
-                if (job.mode == JobMode.VOICE && fileStore.isValidRaw(job.rawFile)) {
-                    promoteRecording(job.id, job.rawFile)
+                if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
+                    promoteRecording(job.id, job.rawFile, job.rawFormat)
                 }
             }
             JobState.RETRY_WAITING -> {
-                if (job.mode == JobMode.VOICE && fileStore.isValidRaw(job.rawFile)) {
-                    promoteRecording(job.id, job.rawFile)
+                if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
+                    promoteRecording(job.id, job.rawFile, job.rawFormat)
                 }
             }
             JobState.IDLE -> Unit
@@ -675,13 +697,23 @@ class VoiceJobController(
         if (testResult != null) job.testCallback?.invoke(testResult)
     }
 
-    private fun promoteRecording(jobId: Long, file: File): File? {
-        if (jobId < lastPromotedJobId && fileStore.hasLastRecording()) {
+    private fun promoteRecording(
+        jobId: Long,
+        file: File,
+        format: Pcm16Format?,
+    ): AudioFileStore.RawRecording? {
+        if (format == null) {
             file.delete()
-            return fileStore.lastRecordingFile
+            diagnostics.error("recording", "job=$jobId cannot preserve raw audio without its PCM format")
+            return null
+        }
+        val existingLastRecording = fileStore.lastRecording()
+        if (jobId < lastPromotedJobId && existingLastRecording != null) {
+            file.delete()
+            return existingLastRecording
         }
         return try {
-            fileStore.promoteToLast(file)?.also { lastPromotedJobId = jobId }
+            fileStore.promoteToLast(file, format)?.also { lastPromotedJobId = jobId }
         } catch (error: Exception) {
             diagnostics.error(
                 "recording",
@@ -690,6 +722,10 @@ class VoiceJobController(
             null
         }
     }
+
+    private fun hasValidRawAudio(job: ActiveJob): Boolean = job.rawFormat
+        ?.let { format -> fileStore.isValidRaw(job.rawFile, format) }
+        ?: false
 
     private fun validateRuntimeSettings(runtime: RuntimeSettings): String? {
         val errors = settingsRepository.validate(runtime.app).toMutableList()

@@ -25,14 +25,36 @@ data class AudioConfig(
     val bitrateKbps: Int = DEFAULT_BITRATE_KBPS,
 ) {
     fun normalized(): AudioConfig {
+        val normalizedSampleRate = sampleRate.takeIf { it in SAMPLE_RATES } ?: DEFAULT_SAMPLE_RATE
+        return normalizedForSampleRate(normalizedSampleRate)
+    }
+
+    /**
+     * Resolves the automatic output sample-rate setting for one PCM capture.
+     *
+     * Capture remains at the route-selected rate. The encoded output is capped at 48 kHz, which
+     * is both the highest selectable output rate and the useful ceiling for the supported codecs.
+     */
+    fun resolvedForInput(inputSampleRateHz: Int): AudioConfig {
+        require(inputSampleRateHz > 0) { "输入采样率必须为正数" }
+        val resolvedSampleRate = if (sampleRate == AUTO_SAMPLE_RATE) {
+            inputSampleRateHz.coerceAtMost(MAX_AUTO_OUTPUT_SAMPLE_RATE)
+        } else {
+            sampleRate
+        }
+        return normalizedForSampleRate(resolvedSampleRate)
+    }
+
+    private fun normalizedForSampleRate(normalizedSampleRate: Int): AudioConfig {
         val compatible = compatibleContainers(codec)
-        val bitrates = compatibleBitrates(codec, sampleRate)
+        val bitrates = compatibleBitrates(codec, normalizedSampleRate)
         return copy(
+            sampleRate = normalizedSampleRate,
             container = container.takeIf { it in compatible } ?: defaultContainer(codec),
             bitrateKbps = if (codec == AudioCodec.PCM) {
                 DEFAULT_BITRATE_KBPS
             } else {
-                bitrateKbps.takeIf { it in bitrates } ?: defaultBitrate(codec, sampleRate)
+                bitrateKbps.takeIf { it in bitrates } ?: defaultBitrate(codec, normalizedSampleRate)
             },
         )
     }
@@ -49,13 +71,15 @@ data class AudioConfig(
     }
 
     companion object {
-        const val INPUT_SAMPLE_RATE = 16_000
+        /** Select an output rate that follows the PCM capture's client-side sample rate. */
+        const val AUTO_SAMPLE_RATE = 0
         const val DEFAULT_BIT_DEPTH = 16
-        const val DEFAULT_SAMPLE_RATE = 16_000
+        const val DEFAULT_SAMPLE_RATE = AUTO_SAMPLE_RATE
         const val DEFAULT_BITRATE_KBPS = 128
+        const val MAX_AUTO_OUTPUT_SAMPLE_RATE = 48_000
 
         val BIT_DEPTHS = listOf(8, 16, 24, 32)
-        val SAMPLE_RATES = listOf(8_000, 16_000, 24_000, 32_000, 44_100, 48_000)
+        val SAMPLE_RATES = listOf(AUTO_SAMPLE_RATE, 8_000, 16_000, 24_000, 32_000, 44_100, 48_000)
         val BITRATES_KBPS = listOf(16, 32, 64, 128, 192, 256, 320)
 
         fun compatibleContainers(codec: AudioCodec): List<AudioContainer> = when (codec) {
@@ -65,15 +89,24 @@ data class AudioConfig(
             AudioCodec.PCM -> listOf(AudioContainer.WAV)
         }
 
-        fun compatibleBitrates(codec: AudioCodec, sampleRate: Int): List<Int> = when (codec) {
-            AudioCodec.OPUS -> BITRATES_KBPS.filter { it <= 256 }
-            AudioCodec.MP3 -> when (sampleRate) {
-                8_000 -> BITRATES_KBPS.filter { it <= 64 }
-                16_000, 24_000 -> BITRATES_KBPS.filter { it <= 128 }
-                else -> BITRATES_KBPS.filter { it >= 32 }
+        fun compatibleBitrates(codec: AudioCodec, sampleRate: Int): List<Int> {
+            // The UI needs a provisional list before a route is active. Use the 48 kHz choices;
+            // resolvedForInput() will normalize an incompatible choice for a lower-rate route.
+            val effectiveSampleRate = if (sampleRate == AUTO_SAMPLE_RATE) {
+                MAX_AUTO_OUTPUT_SAMPLE_RATE
+            } else {
+                sampleRate
             }
-            AudioCodec.AAC -> BITRATES_KBPS.filter { it * 1_000 <= sampleRate * 6 }
-            AudioCodec.PCM -> emptyList()
+            return when (codec) {
+                AudioCodec.OPUS -> BITRATES_KBPS.filter { it <= 256 }
+                AudioCodec.MP3 -> when {
+                    effectiveSampleRate <= 8_000 -> BITRATES_KBPS.filter { it <= 64 }
+                    effectiveSampleRate <= 24_000 -> BITRATES_KBPS.filter { it <= 128 }
+                    else -> BITRATES_KBPS.filter { it >= 32 }
+                }
+                AudioCodec.AAC -> BITRATES_KBPS.filter { it * 1_000 <= effectiveSampleRate * 6 }
+                AudioCodec.PCM -> emptyList()
+            }
         }
 
         fun defaultBitrate(codec: AudioCodec, sampleRate: Int): Int {

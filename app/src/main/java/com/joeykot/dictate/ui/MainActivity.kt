@@ -281,7 +281,7 @@ class MainActivity : Activity() {
         addView(bitDepthRow)
 
         sampleRateSpinner = spinner(AudioConfig.SAMPLE_RATES.map(::formatSampleRate))
-        addView(labeledRow("采样率", sampleRateSpinner))
+        addView(labeledRow("输出采样率", sampleRateSpinner))
 
         codecSpinner = spinner(AudioCodec.entries.map { codecLabel(it) })
         addView(labeledRow("编码", codecSpinner))
@@ -1046,6 +1046,7 @@ class MainActivity : Activity() {
     }
 
     private fun formatSampleRate(value: Int): String = when (value) {
+        AudioConfig.AUTO_SAMPLE_RATE -> "跟随录音输入（最高 48 kHz）"
         44_100 -> "44.1 kHz"
         else -> "${value / 1_000} kHz"
     }

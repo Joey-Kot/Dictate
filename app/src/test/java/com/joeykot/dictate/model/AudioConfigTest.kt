@@ -81,4 +81,40 @@ class AudioConfigTest {
         assertTrue(valid.validate().isEmpty())
         assertFalse(invalid.validate().isEmpty())
     }
+
+    @Test
+    fun automaticOutputRateFollowsTheCaptureRate() {
+        val resolved = AudioConfig(
+            sampleRate = AudioConfig.AUTO_SAMPLE_RATE,
+            codec = AudioCodec.MP3,
+            bitrateKbps = 128,
+        ).resolvedForInput(48_000)
+
+        assertEquals(48_000, resolved.sampleRate)
+        assertEquals(128, resolved.bitrateKbps)
+    }
+
+    @Test
+    fun automaticOutputRateCapsHighRateCaptureAt48Khz() {
+        val resolved = AudioConfig(
+            sampleRate = AudioConfig.AUTO_SAMPLE_RATE,
+            codec = AudioCodec.AAC,
+            bitrateKbps = 256,
+        ).resolvedForInput(96_000)
+
+        assertEquals(48_000, resolved.sampleRate)
+        assertEquals(256, resolved.bitrateKbps)
+    }
+
+    @Test
+    fun automaticOutputNormalizesBitrateForLowRateCapture() {
+        val resolved = AudioConfig(
+            sampleRate = AudioConfig.AUTO_SAMPLE_RATE,
+            codec = AudioCodec.MP3,
+            bitrateKbps = 320,
+        ).resolvedForInput(8_000)
+
+        assertEquals(8_000, resolved.sampleRate)
+        assertEquals(64, resolved.bitrateKbps)
+    }
 }

@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioFormat
 import android.media.MediaRecorder
 import android.media.AudioManager
 import android.media.AudioRecordingConfiguration
@@ -18,6 +19,7 @@ import android.os.Looper
 import android.os.PowerManager
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.R
+import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.ui.MainActivity
 import java.io.File
 
@@ -31,6 +33,7 @@ class RecordingService : Service() {
     private var unexpectedShutdown = false
     private var capturePaused = false
     private var sawActiveRecordingConfiguration = false
+    private var lastRecordingConfigurationSummary: String? = null
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: List<AudioRecordingConfiguration>) {
             val currentRecorder = recorder ?: return
@@ -39,6 +42,7 @@ class RecordingService : Service() {
             val ownConfiguration = configs.firstOrNull { it.clientAudioSessionId == sessionId }
             if (ownConfiguration != null) {
                 sawActiveRecordingConfiguration = true
+                reportRecordingConfiguration(activeJobId, ownConfiguration)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ownConfiguration.isClientSilenced) {
                     currentRecorder.fail("麦克风被其他应用或系统占用")
                 }
@@ -79,15 +83,23 @@ class RecordingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun onRecorderStarted(jobId: Long, source: Int, sourceRecorder: AudioRecorder) {
+    private fun onRecorderStarted(
+        jobId: Long,
+        source: Int,
+        format: Pcm16Format,
+        sourceRecorder: AudioRecorder,
+    ) {
         if (activeJobId != jobId || recorder !== sourceRecorder) return
         val sourceName = if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION) {
             "VOICE_RECOGNITION"
         } else {
             "MIC"
         }
-        applicationState.diagnostics.info("recording", "job=$jobId source=$sourceName")
-        applicationState.voiceJobController.onRecordingStarted(jobId)
+        applicationState.diagnostics.info(
+            "recording",
+            "job=$jobId source=$sourceName client=${format.summary()}",
+        )
+        applicationState.voiceJobController.onRecordingStarted(jobId, format)
     }
 
     private fun onRecorderAmplitude(jobId: Long, amplitude: Float, sourceRecorder: AudioRecorder) {
@@ -104,6 +116,7 @@ class RecordingService : Service() {
     ) {
         if (activeJobId != jobId || recorder !== sourceRecorder) return
         val wasUnexpected = unexpectedShutdown
+        val captureFormat = sourceRecorder.captureFormat()
         clearCaptureState()
         applicationState.voiceJobController.onRecordingCompleted(
             jobId = jobId,
@@ -111,6 +124,7 @@ class RecordingService : Service() {
             valid = valid,
             discarded = discarded,
             unexpected = wasUnexpected,
+            format = captureFormat,
         )
         stopSelf()
     }
@@ -123,9 +137,10 @@ class RecordingService : Service() {
         sourceRecorder: AudioRecorder,
     ) {
         if (activeJobId != jobId || recorder !== sourceRecorder) return
+        val captureFormat = sourceRecorder.captureFormat()
         applicationState.diagnostics.error("recording", "job=$jobId $message")
         clearCaptureState()
-        applicationState.voiceJobController.onRecordingFailed(jobId, file, valid, message)
+        applicationState.voiceJobController.onRecordingFailed(jobId, file, valid, message, captureFormat)
         stopSelf()
     }
 
@@ -160,6 +175,7 @@ class RecordingService : Service() {
         unexpectedShutdown = false
         capturePaused = false
         sawActiveRecordingConfiguration = false
+        lastRecordingConfigurationSummary = null
 
         try {
             val notification = buildNotification(paused = false)
@@ -185,8 +201,8 @@ class RecordingService : Service() {
 
         lateinit var createdRecorder: AudioRecorder
         val callback = object : AudioRecorder.Callback {
-            override fun onStarted(source: Int) {
-                onRecorderStarted(jobId, source, createdRecorder)
+            override fun onStarted(source: Int, format: Pcm16Format) {
+                onRecorderStarted(jobId, source, format, createdRecorder)
             }
 
             override fun onAmplitude(amplitude: Float) {
@@ -217,6 +233,7 @@ class RecordingService : Service() {
 
     private fun resumeCapture() {
         sawActiveRecordingConfiguration = false
+        lastRecordingConfigurationSummary = null
         if (recorder?.resume() == true) {
             capturePaused = false
             updateNotification(paused = false)
@@ -228,6 +245,7 @@ class RecordingService : Service() {
         activeJobId = NO_JOB
         capturePaused = false
         sawActiveRecordingConfiguration = false
+        lastRecordingConfigurationSummary = null
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
@@ -245,6 +263,28 @@ class RecordingService : Service() {
         wakeLock?.let { lock -> if (lock.isHeld) lock.release() }
         wakeLock = null
     }
+
+    private fun reportRecordingConfiguration(
+        jobId: Long,
+        configuration: AudioRecordingConfiguration,
+    ) {
+        val device = configuration.audioDevice
+        val route = if (device == null) {
+            "unknown"
+        } else {
+            "id=${device.id} type=${device.type} name=${diagnosticsValue(device.productName.toString())}"
+        }
+        val summary = "route=$route client=${formatSummary(configuration.clientFormat)} " +
+            "device=${formatSummary(configuration.format)}"
+        if (summary == lastRecordingConfigurationSummary) return
+        lastRecordingConfigurationSummary = summary
+        applicationState.diagnostics.info("recording", "job=$jobId $summary")
+    }
+
+    private fun formatSummary(format: AudioFormat): String =
+        "${format.sampleRate}Hz/${format.channelCount}ch/encoding=${format.encoding}"
+
+    private fun diagnosticsValue(value: String): String = applicationState.diagnostics.sanitize(value, 120)
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(

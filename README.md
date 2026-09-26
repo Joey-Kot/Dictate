@@ -9,11 +9,11 @@ https://github.com/user-attachments/assets/2be67e90-1639-4ceb-94db-c9c510f2d183
 ## Features
 
 - No IME, keyboard, candidate bar, editing context, history list, cloud account, or proxy server.
-- `AudioRecord` PCM capture with pause/resume, microphone foreground service, wake lock, and cancellation.
+- `AudioRecord` PCM capture at the active input route's selected sample rate, in 16-bit mono, with pause/resume, microphone foreground service, wake lock, and cancellation.
 - Draggable, non-focusable accessibility overlay with persisted, inset-aware screen position; its size, opacity, and recording/paused/processing color scheme are configurable and update without restarting the accessibility service.
 - An in-progress recording continues while the screen is off; no lock-screen controls or lock-screen text insertion are provided.
 - Embedded FFmpeg `n8.1`, Opus `1.5.2`, and LAME `3.100`, built from source for `arm64-v8a` only.
-- Opus, MP3, AAC, and PCM/WAV output with valid codec/container choices only.
+- Opus, MP3, AAC, and PCM/WAV output with valid codec/container choices only; output rate follows the active capture rate by default (capped at 48 kHz).
 - Direct multipart requests to OpenAI-compatible `/v1/audio/transcriptions`; success requires a non-empty top-level JSON string `text`.
 - Current-focus insertion plus a configurable clipboard safety copy, enabled by default; when disabled, clipboard is used only after an explicit insertion failure.
 - Cancellable FFmpeg process, HTTP request, and exponential retry wait, all protected by a monotonically increasing task ID.
@@ -73,7 +73,7 @@ sequenceDiagram
 
   U->>O: Tap
   O->>J: Start recording
-  J->>R: Record raw mono PCM
+  J->>R: Record route-selected-rate mono PCM
 
   U->>O: Tap
   O->>J: Stop and transcribe
