@@ -6,14 +6,6 @@ import org.junit.Test
 
 class RequestPolicyTest {
     @Test
-    fun reservedMultipartFieldsAreCaseInsensitive() {
-        assertTrue(AdditionalParameters.isReservedField("file"))
-        assertTrue(AdditionalParameters.isReservedField("FILE"))
-        assertTrue(AdditionalParameters.isReservedField("Model"))
-        assertFalse(AdditionalParameters.isReservedField("language"))
-    }
-
-    @Test
     fun retryableHttpStatusesMatchTheSpecification() {
         listOf(408, 429, 500, 503, 599).forEach { status ->
             assertTrue("HTTP $status should be retryable", isRetryableHttpStatus(status))

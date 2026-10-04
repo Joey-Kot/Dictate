@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_input_sample_rate">入力サンプルレートは正の数である必要があります</string>
+    <string name="settings_sample_rate_unsupported">サンプルレートがサポートされていません</string>
+    <string name="settings_max_retries">最大再試行回数は 0～10 の範囲で指定してください</string>
+    <string name="settings_initial_backoff">初回の待機時間は 0.1～60 秒の範囲で指定してください</string>
+    <string name="settings_long_press">長押し時間は 300～5000 ms の範囲で指定してください</string>
+    <string name="settings_double_tap">ダブルタップの間隔は 150～1000 ms の範囲で指定してください</string>
+    <string name="settings_recording_color">録音中の色は #RRGGBB 形式で指定してください</string>
+    <string name="settings_paused_color">一時停止中の色は #RRGGBB 形式で指定してください</string>
+    <string name="settings_processing_color">処理中の色は #RRGGBB 形式で指定してください</string>
+    <string name="settings_write_thread">メインスレッドで設定を書き込むことはできません</string>
+    <string name="settings_write_failed">設定を保存できませんでした</string>
+    <string name="settings_prompt_save_failed">プロンプトを保存できませんでした</string>
+    <string name="settings_base_url_invalid">Base URL が無効です</string>
+    <string name="settings_additional_invalid">追加パラメータが無効です</string>
+    <string name="settings_post_base_url">後処理の Base URL は有効な HTTP または HTTPS アドレスで指定してください</string>
+    <string name="settings_import_json">インポートするファイルが有効な JSON オブジェクトではありません</string>
+    <string name="settings_schema_version">設定の schemaVersion がサポートされていません</string>
+    <string name="settings_channels">audioOutput.channels は 1 である必要があります</string>
+    <string name="settings_codec_invalid">audioOutput.codec が無効です</string>
+    <string name="settings_container_invalid">audioOutput.container が無効です</string>
+    <string name="settings_language_unsupported">サポートされていない表示言語です</string>
+    <string name="settings_import_api_key">インポートするファイルに API キーが含まれています。明示的な確認が必要です</string>
+    <string name="settings_color_scheme_invalid">display.colorScheme が無効です</string>
+    <string name="settings_bit_depth">ビット深度は次のいずれかで指定してください：%1$s ビット</string>
+    <string name="settings_codec_bitrate">%1$s コーデックは現在のサンプルレートでこのビットレートをサポートしていません</string>
+    <string name="settings_codec_container">%1$s コーデックで %2$s コンテナは使用できません</string>
+    <string name="settings_button_scale">ボタンのサイズは %1$s～%2$s の範囲で指定してください</string>
+    <string name="settings_button_opacity">ボタンの不透明度は %1$s～%2$s の範囲で指定してください</string>
+    <string name="settings_field_object">%1$s は JSON オブジェクトである必要があります</string>
+    <string name="settings_field_string">%1$s は文字列である必要があります</string>
+    <string name="settings_field_boolean">%1$s はブール値である必要があります</string>
+    <string name="settings_field_integer">%1$s は整数である必要があります</string>
+    <string name="settings_field_finite">%1$s は有限の数値である必要があります</string>
+    <string name="settings_field_number">%1$s は数値である必要があります</string>
+    <string name="settings_field_rgb">%1$s は #RRGGBB 形式で指定してください</string>
+    <string name="settings_field_missing">フィールド %1$s がありません</string>
+    <string name="settings_field_null">%1$s を null にすることはできません</string>
+</resources>

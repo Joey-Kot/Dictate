@@ -8,15 +8,20 @@ import android.os.Looper
 import android.widget.Toast
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.accessibility.TextDelivery
+import com.joeykot.dictate.accessibility.DictateAccessibilityService
 import com.joeykot.dictate.audio.AudioTranscoder
 import com.joeykot.dictate.audio.RecordingService
+import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.model.JobState
 import com.joeykot.dictate.model.JobUiState
 import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.model.RuntimeSettings
+import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
 import com.joeykot.dictate.network.TranscriptionClient
+import com.joeykot.dictate.network.PostProcessingClient
 import com.joeykot.dictate.settings.SettingsRepository
 import com.joeykot.dictate.ui.MainActivity
 import com.joeykot.dictate.util.AudioFileStore
@@ -48,15 +53,17 @@ class VoiceJobController(
         val serverSummary: String = "",
     )
 
-    private enum class JobMode {
+    private enum class JobMode(val postProcessing: Boolean = false, val connectionTest: Boolean = false) {
         VOICE,
-        CONNECTION_TEST,
+        CONNECTION_TEST(connectionTest = true),
+        POST_PROCESSING(postProcessing = true),
+        POST_PROCESSING_TEST(postProcessing = true, connectionTest = true),
     }
 
     private data class ActiveJob(
         val id: Long,
         val mode: JobMode,
-        var rawFile: File,
+        var rawFile: File? = null,
         var runtimeSettings: RuntimeSettings?,
         var rawFormat: Pcm16Format? = null,
         var outputFile: File? = null,
@@ -65,6 +72,8 @@ class VoiceJobController(
         var workerFuture: Future<*>? = null,
         var retryFuture: ScheduledFuture<*>? = null,
         val testCallback: ((ConnectionTestResult) -> Unit)? = null,
+        val inputText: String = "",
+        val prompt: PromptConfig? = null,
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -78,6 +87,9 @@ class VoiceJobController(
     private val nextJobId = AtomicLong(0L)
     private val transcoder = AudioTranscoder(application, diagnostics)
     private val client = TranscriptionClient(diagnostics)
+    private val postProcessingClient = PostProcessingClient(diagnostics)
+    private var postProcessingMenuListener: ((String, List<PromptConfig>) -> Unit)? = null
+    private var selectionRequestId = 0L
     private val recordingServiceIntent = Intent(application, RecordingService::class.java)
     private val pendingPreserveAfterRecorderStops = mutableSetOf<Long>()
 
@@ -86,6 +98,8 @@ class VoiceJobController(
 
     @Volatile
     private var uiState = JobUiState()
+
+    private var uiMessage: (() -> String)? = { AppStrings.get(R.string.runtime_idle, "Idle") }
 
     @Volatile
     private var uiVersion = 0L
@@ -98,9 +112,8 @@ class VoiceJobController(
     fun addListener(listener: Listener) {
         listeners.add(listener)
         val version = uiVersion
-        val state = uiState
         mainHandler.post {
-            if (version == uiVersion) listener.onStateChanged(state)
+            if (version == uiVersion) listener.onStateChanged(uiState)
         }
     }
 
@@ -110,9 +123,24 @@ class VoiceJobController(
 
     fun currentState(): JobUiState = uiState
 
+    fun refreshLanguage() {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        val message = uiMessage?.invoke() ?: return
+        val state = uiState.copy(message = message)
+        uiState = state
+        // Changing the display language must not invalidate an in-flight selection read or job.
+        listeners.forEach { it.onStateChanged(state) }
+    }
+
+    fun setPostProcessingMenuListener(listener: ((String, List<PromptConfig>) -> Unit)?) {
+        selectionRequestId++
+        postProcessingMenuListener = listener
+    }
+
     fun handleSingleTap(expectedState: JobState) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (uiState.state != expectedState) return
+        selectionRequestId++
         when (expectedState) {
             JobState.IDLE -> startRecording()
             JobState.RECORDING -> stopRecording()
@@ -127,8 +155,31 @@ class VoiceJobController(
     fun handleLongPress(expectedState: JobState) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (uiState.state != expectedState) return
+        val requestId = ++selectionRequestId
         when (expectedState) {
-            JobState.IDLE -> resendLastRecording()
+            JobState.IDLE -> {
+                val prompts = settingsRepository.get().postProcessing.prompts
+                val service = DictateAccessibilityService.current()
+                if (prompts.isEmpty() || service == null) {
+                    resendLastRecording()
+                    return
+                }
+                val version = uiVersion
+                val isCurrentRead = {
+                    requestId == selectionRequestId && version == uiVersion &&
+                        uiState.state == JobState.IDLE && activeJob == null &&
+                        DictateAccessibilityService.current() === service
+                }
+                service.readSelectedText(isCurrentRead) { selected ->
+                    if (isCurrentRead()) {
+                        if (shouldOpenPostProcessingMenu(selected, prompts.size)) {
+                            postProcessingMenuListener?.invoke(checkNotNull(selected), prompts)
+                        } else {
+                            resendLastRecording()
+                        }
+                    }
+                }
+            }
             JobState.RECORDING -> pauseRecording()
             JobState.PAUSED -> resumeRecording()
             JobState.TRANSCODING,
@@ -141,6 +192,7 @@ class VoiceJobController(
     fun handleDoubleTap(expectedState: JobState) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (uiState.state != expectedState) return
+        selectionRequestId++
         when (expectedState) {
             JobState.IDLE -> Unit
             JobState.RECORDING,
@@ -158,7 +210,7 @@ class VoiceJobController(
     ): Boolean {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (uiState.state != JobState.IDLE || activeJob != null) {
-            callback(ConnectionTestResult(false, message = "当前有语音任务正在运行"))
+            callback(ConnectionTestResult(false, message = AppStrings.get(R.string.runtime_busy, "A task is already running")))
             return false
         }
         val validationError = validateRuntimeSettings(runtimeSettings)
@@ -179,7 +231,9 @@ class VoiceJobController(
             testCallback = callback,
         )
         activeJob = job
-        updateUi(jobId, JobUiState(JobState.TRANSCODING, "正在准备连通性测试音频"))
+        updateUi(jobId, JobState.TRANSCODING) {
+            AppStrings.get(R.string.runtime_preparing_test_audio, "Preparing connection test audio")
+        }
         job.workerFuture = worker.submit {
             val prepared = runCatching {
                 ConnectivityTestAudio.writeTo(application, rawFile)
@@ -192,12 +246,66 @@ class VoiceJobController(
             mainHandler.post {
                 if (!isCurrent(jobId)) return@post
                 if (!prepared) {
-                    finishFailure(jobId, "无法读取内置测试音频")
+                    finishFailure(jobId, AppStrings.get(R.string.runtime_test_audio_unreadable, "Unable to read the built-in test audio"))
                 } else {
                     beginTranscode(jobId)
                 }
             }
         }
+        return true
+    }
+
+    fun startPostProcessing(input: String, promptId: String): Boolean {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (uiState.state != JobState.IDLE || activeJob != null || input.isEmpty()) return false
+        val runtime = settingsRepository.runtime()
+        val prompt = runtime.app.postProcessing.prompts.firstOrNull { it.id == promptId }
+        if (prompt == null) {
+            showToast(AppStrings.get(R.string.runtime_prompt_deleted, "This prompt has been deleted"))
+            return false
+        }
+        return beginPostProcessing(runtime, prompt, input, null)
+    }
+
+    fun testPostProcessingConnection(
+        runtime: RuntimeSettings,
+        callback: (ConnectionTestResult) -> Unit,
+    ): Boolean {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (uiState.state != JobState.IDLE || activeJob != null) {
+            callback(ConnectionTestResult(false, message = AppStrings.get(R.string.runtime_busy, "A task is already running")))
+            return false
+        }
+        return beginPostProcessing(
+            runtime,
+            PromptConfig(title = AppStrings.get(R.string.runtime_test_connection, "Test connection"), prompt = "Reply briefly with OK."),
+            "Connection test.",
+            callback,
+        )
+    }
+
+    private fun beginPostProcessing(
+        runtime: RuntimeSettings,
+        prompt: PromptConfig,
+        input: String,
+        callback: ((ConnectionTestResult) -> Unit)?,
+    ): Boolean {
+        val retryError = runtime.app.retry.validate().firstOrNull()
+        if (retryError != null) {
+            if (callback != null) callback(ConnectionTestResult(false, message = retryError))
+            else showToast(retryError)
+            return false
+        }
+        val jobId = nextJobId.incrementAndGet()
+        activeJob = ActiveJob(
+            id = jobId,
+            mode = if (callback == null) JobMode.POST_PROCESSING else JobMode.POST_PROCESSING_TEST,
+            runtimeSettings = runtime,
+            inputText = input,
+            prompt = prompt,
+            testCallback = callback,
+        )
+        startRequest(jobId)
         return true
     }
 
@@ -215,7 +323,7 @@ class VoiceJobController(
         lastAmplitudeDispatchAt = now
         mainHandler.post {
             if (!isCurrent(jobId) || uiState.state != JobState.RECORDING) return@post
-            updateUi(jobId, uiState.copy(amplitude = amplitude))
+            updateUi(jobId, uiState.copy(amplitude = amplitude), uiMessage)
         }
     }
 
@@ -239,12 +347,12 @@ class VoiceJobController(
 
             if (discarded) {
                 file.delete()
-                finishFailure(jobId, "本次录音已丢弃", showToast = false)
+                finishFailure(jobId, AppStrings.get(R.string.runtime_recording_discarded, "Recording discarded"), showToast = false)
                 return@post
             }
             if (!valid) {
                 file.delete()
-                finishFailure(jobId, "录音过短或未形成有效音频")
+                finishFailure(jobId, AppStrings.get(R.string.runtime_recording_too_short, "The recording is too short or contains no valid audio"))
                 return@post
             }
 
@@ -252,7 +360,11 @@ class VoiceJobController(
             if (promoted == null) {
                 finishFailure(
                     jobId,
-                    if (format == null) "缺少本次录音的 PCM 格式" else "无法保存本次录音",
+                    if (format == null) {
+                        AppStrings.get(R.string.runtime_recording_pcm_missing, "The PCM format of this recording is missing")
+                    } else {
+                        AppStrings.get(R.string.runtime_recording_save_failed, "Unable to save this recording")
+                    },
                 )
                 return@post
             }
@@ -260,11 +372,11 @@ class VoiceJobController(
             job.rawFormat = promoted.format
 
             if (unexpected) {
-                finishFailure(jobId, "录音服务意外终止，已保留可用录音")
+                finishFailure(jobId, AppStrings.get(R.string.runtime_service_stopped_preserved, "The recording service stopped unexpectedly; usable audio was saved"))
                 return@post
             }
             if (uiState.state != JobState.TRANSCODING) {
-                finishFailure(jobId, "录音状态异常，已保留可用录音")
+                finishFailure(jobId, AppStrings.get(R.string.runtime_state_invalid_preserved, "The recording entered an unexpected state; usable audio was saved"))
                 return@post
             }
             job.runtimeSettings = settingsRepository.runtime()
@@ -294,14 +406,14 @@ class VoiceJobController(
         mainHandler.post {
             val job = activeJob
             if (job?.id != jobId) return@post
-            job.rawFile.delete()
+            job.rawFile?.delete()
             finishFailure(jobId, message)
         }
     }
 
     private fun startRecording() {
         if (application.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            showToast("请先授予麦克风权限")
+            showToast(AppStrings.get(R.string.runtime_microphone_permission, "Grant microphone permission first"))
             application.startActivity(
                 Intent(application, MainActivity::class.java)
                     .putExtra(MainActivity.EXTRA_REQUEST_MICROPHONE, true)
@@ -320,7 +432,7 @@ class VoiceJobController(
             rawFile = rawFile,
             runtimeSettings = null,
         )
-        updateUi(jobId, JobUiState(JobState.RECORDING, "录制中"))
+        updateUi(jobId, JobState.RECORDING) { AppStrings.get(R.string.runtime_recording, "Recording") }
 
         try {
             val intent = RecordingService.startIntent(application, jobId, rawFile)
@@ -329,7 +441,7 @@ class VoiceJobController(
             rawFile.delete()
             finishFailure(
                 jobId,
-                "无法启动录音服务：${error.message ?: error.javaClass.simpleName}",
+                AppStrings.get(R.string.runtime_recording_service_start_failed, "Unable to start the recording service: %1\$s", error.message ?: error.javaClass.simpleName),
             )
         }
     }
@@ -339,9 +451,9 @@ class VoiceJobController(
         if (uiState.state != JobState.RECORDING) return
         try {
             application.startService(RecordingService.pauseIntent(application, job.id))
-            updateUi(job.id, JobUiState(JobState.PAUSED, "录音已暂停"))
+            updateUi(job.id, JobState.PAUSED) { AppStrings.get(R.string.runtime_paused, "Recording paused") }
         } catch (error: Exception) {
-            abortRecorderWithPreservation(job, "无法暂停录音：${error.message ?: error.javaClass.simpleName}")
+            abortRecorderWithPreservation(job, AppStrings.get(R.string.runtime_pause_failed, "Unable to pause recording: %1\$s", error.message ?: error.javaClass.simpleName))
         }
     }
 
@@ -350,20 +462,22 @@ class VoiceJobController(
         if (uiState.state != JobState.PAUSED) return
         try {
             application.startService(RecordingService.resumeIntent(application, job.id))
-            updateUi(job.id, JobUiState(JobState.RECORDING, "录制中"))
+            updateUi(job.id, JobState.RECORDING) { AppStrings.get(R.string.runtime_recording, "Recording") }
         } catch (error: Exception) {
-            abortRecorderWithPreservation(job, "无法恢复录音：${error.message ?: error.javaClass.simpleName}")
+            abortRecorderWithPreservation(job, AppStrings.get(R.string.runtime_resume_failed, "Unable to resume recording: %1\$s", error.message ?: error.javaClass.simpleName))
         }
     }
 
     private fun stopRecording() {
         val job = activeJob ?: return
         if (uiState.state != JobState.RECORDING) return
-        updateUi(job.id, JobUiState(JobState.TRANSCODING, "正在结束录音"))
+        updateUi(job.id, JobState.TRANSCODING) {
+            AppStrings.get(R.string.runtime_stopping_recording, "Finishing recording")
+        }
         try {
             application.startService(RecordingService.stopIntent(application, job.id))
         } catch (error: Exception) {
-            abortRecorderWithPreservation(job, "无法停止录音：${error.message ?: error.javaClass.simpleName}")
+            abortRecorderWithPreservation(job, AppStrings.get(R.string.runtime_stop_failed, "Unable to stop recording: %1\$s", error.message ?: error.javaClass.simpleName))
         }
     }
 
@@ -371,7 +485,7 @@ class VoiceJobController(
         if (activeJob != null) return
         val lastRecording = fileStore.lastRecording()
         if (lastRecording == null) {
-            showToast("没有可重发的上一条录音")
+            showToast(AppStrings.get(R.string.runtime_no_previous_recording, "No previous recording to resend"))
             return
         }
         val runtime = settingsRepository.runtime()
@@ -384,18 +498,21 @@ class VoiceJobController(
             runtimeSettings = runtime,
             recordingClosed = true,
         )
-        updateUi(jobId, JobUiState(JobState.TRANSCODING, "正在按当前配置重新转码"))
+        updateUi(jobId, JobState.TRANSCODING) {
+            AppStrings.get(R.string.runtime_retranscoding, "Transcoding again with the current settings")
+        }
         beginTranscode(jobId)
     }
 
     private fun beginTranscode(jobId: Long) {
         val job = activeJob?.takeIf { it.id == jobId } ?: return
+        val rawFile = job.rawFile ?: return
         val runtime = job.runtimeSettings ?: run {
-            finishFailure(jobId, "缺少转写设置")
+            finishFailure(jobId, AppStrings.get(R.string.runtime_transcription_settings_missing, "Transcription settings are missing"))
             return
         }
         val rawFormat = job.rawFormat ?: run {
-            finishFailure(jobId, "缺少原始录音格式")
+            finishFailure(jobId, AppStrings.get(R.string.runtime_raw_format_missing, "The original recording format is missing"))
             return
         }
         val validationError = validateRuntimeSettings(runtime)
@@ -407,10 +524,12 @@ class VoiceJobController(
         val audio = runtime.app.audio.normalized()
         val output = fileStore.newEncodedFile(jobId, audio.container)
         job.outputFile = output
-        updateUi(jobId, JobUiState(JobState.TRANSCODING, "正在转码为 ${audio.container.value.uppercase()}"))
+        updateUi(jobId, JobState.TRANSCODING) {
+            AppStrings.get(R.string.runtime_transcoding_to, "Transcoding to %1\$s", audio.container.value.uppercase())
+        }
         job.workerFuture = worker.submit {
             if (!isCurrent(jobId)) return@submit
-            val result = transcoder.transcode(jobId, job.rawFile, rawFormat, output, audio)
+            val result = transcoder.transcode(jobId, rawFile, rawFormat, output, audio)
             mainHandler.post {
                 if (!isCurrent(jobId)) return@post
                 when (result) {
@@ -425,6 +544,10 @@ class VoiceJobController(
     private fun startRequest(jobId: Long) {
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         val runtime = job.runtimeSettings ?: return
+        if (job.mode.postProcessing) {
+            startPostProcessingRequest(job, runtime)
+            return
+        }
         val output = job.outputFile ?: return
         val request = try {
             TranscriptionClient.Request(
@@ -434,18 +557,21 @@ class VoiceJobController(
                 additionalFields = AdditionalParameters.parse(runtime.app.provider.additionalJson),
                 audioFile = output,
                 mimeType = runtime.app.audio.normalized().container.mimeType,
+                additionalJson = runtime.app.provider.additionalJson,
             )
         } catch (error: IllegalArgumentException) {
-            finishFailure(jobId, error.message ?: "请求配置无效")
+            finishFailure(jobId, error.message ?: AppStrings.get(R.string.runtime_invalid_request, "Invalid request settings"))
             return
         }
 
-        val attemptText = if (job.retryCount == 0) {
-            "正在请求转写"
-        } else {
-            "正在执行重试 ${job.retryCount}/${runtime.app.retry.maxRetries}"
+        val attempt = job.retryCount
+        updateUi(jobId, JobState.REQUESTING) {
+            if (attempt == 0) {
+                AppStrings.get(R.string.runtime_requesting_transcription, "Requesting transcription")
+            } else {
+                AppStrings.get(R.string.runtime_retrying, "Retrying %1\$d/%2\$d", attempt, runtime.app.retry.maxRetries)
+            }
         }
-        updateUi(jobId, JobUiState(JobState.REQUESTING, attemptText))
         job.workerFuture = worker.submit {
             if (!isCurrent(jobId)) return@submit
             val result = client.transcribe(jobId, request)
@@ -456,12 +582,42 @@ class VoiceJobController(
         }
     }
 
+    private fun startPostProcessingRequest(job: ActiveJob, runtime: RuntimeSettings) {
+        val prompt = job.prompt ?: return
+        val attempt = job.retryCount
+        updateUi(job.id, JobState.REQUESTING) {
+            val title = if (job.mode.connectionTest) {
+                AppStrings.get(R.string.runtime_test_connection, "Test connection")
+            } else {
+                prompt.title
+            }
+            if (attempt == 0) {
+                AppStrings.get(R.string.runtime_processing_prompt, "Processing: %1\$s", title)
+            } else {
+                AppStrings.get(R.string.runtime_retrying_prompt, "Retry %1\$d/%2\$d: %3\$s", attempt, runtime.app.retry.maxRetries, title)
+            }
+        }
+        job.workerFuture = worker.submit {
+            if (!isCurrent(job.id)) return@submit
+            val result = postProcessingClient.execute(
+                config = runtime.app.postProcessing,
+                apiKey = runtime.postProcessingApiKey,
+                prompt = prompt,
+                input = job.inputText,
+                shouldContinue = { isCurrent(job.id) },
+            )
+            mainHandler.post {
+                if (isCurrent(job.id)) handleRequestResult(job.id, result)
+            }
+        }
+    }
+
     private fun handleRequestResult(jobId: Long, result: TranscriptionClient.Result) {
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         val runtime = job.runtimeSettings ?: return
         when (result) {
             is TranscriptionClient.Result.Success -> {
-                if (job.mode == JobMode.CONNECTION_TEST) {
+                if (job.mode.connectionTest) {
                     completeJob(
                         jobId,
                         ConnectionTestResult(
@@ -470,13 +626,13 @@ class VoiceJobController(
                             elapsedMillis = result.elapsedMillis,
                             text = diagnostics.sanitize(
                                 result.text,
-                                secrets = listOf(runtime.apiKey),
+                                secrets = listOf(runtime.apiKey, runtime.postProcessingApiKey),
                             ),
-                            message = "连接成功",
+                            message = AppStrings.get(R.string.runtime_connection_success, "Connection successful"),
                         ),
                     )
                 } else {
-                    deliverTranscription(jobId, result.text)
+                    deliverResult(jobId, result.text)
                 }
             }
             is TranscriptionClient.Result.Failure -> {
@@ -485,13 +641,15 @@ class VoiceJobController(
                     val retryNumber = job.retryCount + 1
                     job.retryCount = retryNumber
                     val delay = retry.delayMillis(retryNumber)
-                    updateUi(
-                        jobId,
-                        JobUiState(
-                            JobState.RETRY_WAITING,
-                            "重试 $retryNumber/${retry.maxRetries}，${formatDelay(delay)} 后继续",
-                        ),
-                    )
+                    updateUi(jobId, JobState.RETRY_WAITING) {
+                        AppStrings.get(
+                            R.string.runtime_retry_wait,
+                            "Retry %1\$d/%2\$d, continuing in %3\$s",
+                            retryNumber,
+                            retry.maxRetries,
+                            formatDelay(delay),
+                        )
+                    }
                     job.retryFuture = scheduler.schedule(
                         {
                             mainHandler.post {
@@ -501,7 +659,7 @@ class VoiceJobController(
                         delay,
                         TimeUnit.MILLISECONDS,
                     )
-                } else if (job.mode == JobMode.CONNECTION_TEST) {
+                } else if (job.mode.connectionTest) {
                     completeJob(
                         jobId,
                         ConnectionTestResult(
@@ -520,14 +678,14 @@ class VoiceJobController(
         }
     }
 
-    private fun deliverTranscription(jobId: Long, text: String) {
+    private fun deliverResult(jobId: Long, text: String) {
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         val alwaysCopyToClipboard = job.runtimeSettings
             ?.app
             ?.interaction
             ?.alwaysCopyToClipboard
             ?: true
-        updateUi(jobId, JobUiState(JobState.REQUESTING, "正在写入转写结果"))
+        updateUi(jobId, JobState.REQUESTING) { AppStrings.get(R.string.runtime_writing_result, "Inserting the result") }
         TextDelivery.deliver(
             context = application,
             text = text,
@@ -547,7 +705,12 @@ class VoiceJobController(
                     "delivery",
                     "job=$jobId insertion could not be confirmed; copied to clipboard $insertionSummary",
                 )
-                showToast("已尝试写入当前焦点，但无法确认；转写结果已复制到剪贴板")
+                showToast(
+                    AppStrings.get(
+                        R.string.runtime_delivery_unconfirmed_copied,
+                        "Insertion was attempted but could not be confirmed; the result was copied to the clipboard",
+                    ),
+                )
                 completeJob(jobId)
             }
             outcome.insertion.unconfirmed && outcome.copyAttempted -> {
@@ -556,7 +719,7 @@ class VoiceJobController(
                     "job=$jobId insertion could not be confirmed and clipboard copy failed " +
                         insertionSummary,
                 )
-                showToast("已尝试写入当前焦点，但无法确认，且复制到剪贴板失败")
+                showToast(AppStrings.get(R.string.runtime_delivery_unconfirmed_copy_failed, "Insertion could not be confirmed, and copying to the clipboard failed"))
                 completeJob(jobId)
             }
             outcome.insertion.unconfirmed -> {
@@ -565,7 +728,7 @@ class VoiceJobController(
                     "job=$jobId insertion could not be confirmed; clipboard copy not requested " +
                         insertionSummary,
                 )
-                showToast("已尝试写入当前焦点，但无法确认结果")
+                showToast(AppStrings.get(R.string.runtime_delivery_unconfirmed, "Insertion was attempted but could not be confirmed"))
                 completeJob(jobId)
             }
             outcome.inserted && outcome.copied -> {
@@ -584,7 +747,7 @@ class VoiceJobController(
                     "delivery",
                     "job=$jobId inserted into current focus but clipboard copy failed $insertionSummary",
                 )
-                showToast("转写结果已写入当前焦点，但复制到剪贴板失败")
+                showToast(AppStrings.get(R.string.runtime_delivery_inserted_copy_failed, "The result was inserted, but copying to the clipboard failed"))
                 completeJob(jobId)
             }
             outcome.copied -> {
@@ -592,7 +755,7 @@ class VoiceJobController(
                     "delivery",
                     "job=$jobId copied to clipboard fallback $insertionSummary",
                 )
-                showToast("当前焦点不可写入，转写结果已复制到剪贴板")
+                showToast(AppStrings.get(R.string.runtime_delivery_copied, "Unable to insert at the current focus; the result was copied to the clipboard"))
                 completeJob(jobId)
             }
             else -> {
@@ -600,7 +763,7 @@ class VoiceJobController(
                     "delivery",
                     "job=$jobId focus insertion and clipboard both failed $insertionSummary",
                 )
-                finishFailure(jobId, "无法写入当前焦点，也无法写入剪贴板")
+                finishFailure(jobId, AppStrings.get(R.string.runtime_delivery_failed, "Unable to insert the result or copy it to the clipboard"))
             }
         }
     }
@@ -611,7 +774,7 @@ class VoiceJobController(
 
         // Invalidate the job before touching any cancellable component.
         activeJob = null
-        updateUi(null, JobUiState(JobState.IDLE, "任务已取消"))
+        updateUi(null, JobState.IDLE) { AppStrings.get(R.string.runtime_task_cancelled, "Task cancelled") }
 
         job.retryFuture?.cancel(true)
 
@@ -623,7 +786,7 @@ class VoiceJobController(
                     application.startService(RecordingService.cancelIntent(application, job.id))
                 }.isSuccess
                 if (!delivered) application.stopService(recordingServiceIntent)
-                job.rawFile.delete()
+                job.rawFile?.delete()
             }
             JobState.TRANSCODING -> {
                 if (job.recordingClosed && job.outputFile != null) transcoder.cancel(job.id)
@@ -634,18 +797,18 @@ class VoiceJobController(
                     }.isSuccess
                     if (!delivered) application.stopService(recordingServiceIntent)
                 } else if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
-                    promoteRecording(job.id, job.rawFile, job.rawFormat)
+                    promoteRecording(job.id, checkNotNull(job.rawFile), job.rawFormat)
                 }
             }
             JobState.REQUESTING -> {
-                client.cancel(job.id)
+                if (job.mode.postProcessing) postProcessingClient.cancel() else client.cancel(job.id)
                 if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
-                    promoteRecording(job.id, job.rawFile, job.rawFormat)
+                    promoteRecording(job.id, checkNotNull(job.rawFile), job.rawFormat)
                 }
             }
             JobState.RETRY_WAITING -> {
                 if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
-                    promoteRecording(job.id, job.rawFile, job.rawFormat)
+                    promoteRecording(job.id, checkNotNull(job.rawFile), job.rawFormat)
                 }
             }
             JobState.IDLE -> Unit
@@ -654,11 +817,11 @@ class VoiceJobController(
         job.workerFuture?.cancel(true)
         job.outputFile?.delete()
 
-        if (job.mode == JobMode.CONNECTION_TEST) {
-            job.rawFile.delete()
-            job.testCallback?.invoke(ConnectionTestResult(false, message = "测试已取消"))
+        if (job.mode.connectionTest) {
+            job.rawFile?.delete()
+            job.testCallback?.invoke(ConnectionTestResult(false, message = AppStrings.get(R.string.runtime_test_cancelled, "Test cancelled")))
         }
-        showToast("任务已取消")
+        showToast(AppStrings.get(R.string.runtime_task_cancelled, "Task cancelled"))
     }
 
     private fun abortRecorderWithPreservation(job: ActiveJob, message: String) {
@@ -677,10 +840,10 @@ class VoiceJobController(
         diagnostics.error("job", "job=$jobId state=${uiState.state} $message")
         job.retryFuture?.cancel(true)
         job.outputFile?.delete()
-        if (job.mode == JobMode.CONNECTION_TEST) job.rawFile.delete()
+        if (job.mode.connectionTest) job.rawFile?.delete()
         activeJob = null
         updateUi(null, JobUiState(JobState.IDLE, message))
-        if (job.mode == JobMode.CONNECTION_TEST) {
+        if (job.mode.connectionTest) {
             job.testCallback?.invoke(ConnectionTestResult(false, message = message))
         } else if (showToast) {
             showToast(message)
@@ -691,9 +854,9 @@ class VoiceJobController(
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         job.retryFuture?.cancel(false)
         job.outputFile?.delete()
-        if (job.mode == JobMode.CONNECTION_TEST) job.rawFile.delete()
+        if (job.mode.connectionTest) job.rawFile?.delete()
         activeJob = null
-        updateUi(null, JobUiState(JobState.IDLE, "空闲"))
+        updateUi(null, JobState.IDLE) { AppStrings.get(R.string.runtime_idle, "Idle") }
         if (testResult != null) job.testCallback?.invoke(testResult)
     }
 
@@ -723,27 +886,43 @@ class VoiceJobController(
         }
     }
 
-    private fun hasValidRawAudio(job: ActiveJob): Boolean = job.rawFormat
-        ?.let { format -> fileStore.isValidRaw(job.rawFile, format) }
-        ?: false
+    private fun hasValidRawAudio(job: ActiveJob): Boolean {
+        val rawFile = job.rawFile ?: return false
+        val format = job.rawFormat ?: return false
+        return fileStore.isValidRaw(rawFile, format)
+    }
 
     private fun validateRuntimeSettings(runtime: RuntimeSettings): String? {
-        val errors = settingsRepository.validate(runtime.app).toMutableList()
-        if (runtime.app.provider.baseUrl.isBlank()) errors.add("Base URL 不能为空")
-        if (runtime.apiKey.isBlank()) errors.add("API Key 不能为空")
-        if (runtime.app.provider.model.isBlank()) errors.add("Model 不能为空")
+        val errors = (runtime.app.audio.validate() + runtime.app.retry.validate()).toMutableList()
+        if (runtime.app.provider.baseUrl.isBlank()) errors.add(AppStrings.get(R.string.runtime_base_url_required, "Base URL must not be empty"))
+        if (runtime.apiKey.isBlank()) errors.add(AppStrings.get(R.string.runtime_api_key_required, "API Key must not be empty"))
+        try {
+            BaseUrl.transcriptionEndpoint(runtime.app.provider.baseUrl)
+            AdditionalParameters.transcriptionFields(
+                runtime.app.provider.model,
+                runtime.app.provider.additionalJson,
+            )
+        } catch (error: IllegalArgumentException) {
+            errors.add(error.message ?: AppStrings.get(R.string.runtime_invalid_transcription, "Invalid transcription parameters"))
+        }
         return errors.firstOrNull()
     }
 
     private fun isCurrent(jobId: Long): Boolean = activeJob?.id == jobId
 
-    private fun updateUi(jobId: Long?, state: JobUiState) {
+    private fun updateUi(jobId: Long?, state: JobState, message: () -> String) {
+        updateUi(jobId, JobUiState(state, message()), message)
+    }
+
+    private fun updateUi(jobId: Long?, state: JobUiState, message: (() -> String)? = null) {
         if (jobId != null && !isCurrent(jobId)) return
+        uiMessage = message
         uiState = state
         val version = ++uiVersion
         mainHandler.post {
             if (version != uiVersion) return@post
-            listeners.forEach { it.onStateChanged(state) }
+            val currentState = uiState
+            listeners.forEach { it.onStateChanged(currentState) }
         }
     }
 
@@ -755,12 +934,15 @@ class VoiceJobController(
 
     private fun formatDelay(delayMillis: Long): String =
         if (delayMillis % 1_000L == 0L) {
-            "${delayMillis / 1_000L} 秒"
+            AppStrings.get(R.string.runtime_seconds, "%1\$s s", (delayMillis / 1_000L).toString())
         } else {
-            "${delayMillis / 1_000.0} 秒"
+            AppStrings.get(R.string.runtime_seconds, "%1\$s s", (delayMillis / 1_000.0).toString())
         }
 
     private companion object {
         const val AMPLITUDE_INTERVAL_MS = 80L
     }
 }
+
+internal fun shouldOpenPostProcessingMenu(selectedText: String?, promptCount: Int): Boolean =
+    !selectedText.isNullOrEmpty() && promptCount > 0

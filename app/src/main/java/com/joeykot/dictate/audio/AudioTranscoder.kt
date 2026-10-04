@@ -1,6 +1,8 @@
 package com.joeykot.dictate.audio
 
 import android.content.Context
+import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.AudioContainer
@@ -32,12 +34,12 @@ class AudioTranscoder(
     ): Result {
         if (cancelledJobs.remove(jobId)) return Result.Cancelled
         if (!rawInput.isFile || rawInput.length() == 0L) {
-            return Result.Failure("原始录音文件不存在或为空")
+            return Result.Failure(AppStrings.get(R.string.runtime_raw_recording_missing, "The original recording file is missing or empty"))
         }
 
         val executable = File(context.applicationInfo.nativeLibraryDir, FFMPEG_LIBRARY_NAME)
         if (!executable.isFile) {
-            return Result.Failure("应用未包含 arm64-v8a FFmpeg CLI，请重新安装完整 release APK")
+            return Result.Failure(AppStrings.get(R.string.runtime_ffmpeg_missing, "This app does not include arm64-v8a FFmpeg CLI. Reinstall the complete release APK"))
         }
 
         output.parentFile?.mkdirs()
@@ -89,7 +91,11 @@ class AudioTranscoder(
                 diagnostics.error("ffmpeg", "job=$jobId exit=$exitCode $summary")
                 output.delete()
                 Result.Failure(
-                    message = if (summary.isBlank()) "FFmpeg 转码失败" else "FFmpeg 转码失败：$summary",
+                    message = if (summary.isBlank()) {
+                        AppStrings.get(R.string.runtime_ffmpeg_transcode_failed, "FFmpeg transcoding failed")
+                    } else {
+                        AppStrings.get(R.string.runtime_ffmpeg_transcode_detail, "FFmpeg transcoding failed: %1\$s", summary)
+                    },
                     exitCode = exitCode,
                 )
             }
@@ -101,7 +107,7 @@ class AudioTranscoder(
             } else {
                 val summary = diagnostics.sanitize(error.message ?: error.javaClass.simpleName)
                 diagnostics.error("ffmpeg", "job=$jobId start/read failure: $summary")
-                Result.Failure("无法执行 FFmpeg：$summary")
+                Result.Failure(AppStrings.get(R.string.runtime_ffmpeg_execution_failed, "Unable to run FFmpeg: %1\$s", summary))
             }
         } finally {
             cancelledJobs.remove(jobId)

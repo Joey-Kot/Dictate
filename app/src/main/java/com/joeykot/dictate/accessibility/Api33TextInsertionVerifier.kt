@@ -6,6 +6,8 @@ import android.annotation.TargetApi
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.inputmethod.EditorInfo
 import java.util.concurrent.Executors
 
 @TargetApi(Build.VERSION_CODES.TIRAMISU)
@@ -14,6 +16,9 @@ internal class Api33TextInsertionVerifier(
     private val text: String,
     private val shouldContinue: () -> Boolean,
     private val callback: (TextInsertionResult) -> Unit,
+    private val currentInputFocus: () -> AccessibilityNodeInfo? = {
+        service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+    },
 ) : PendingTextInsertionVerification {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor { runnable ->
@@ -24,6 +29,9 @@ internal class Api33TextInsertionVerifier(
     private var active = true
 
     private var completed = false
+    private var committed = false
+    private var initialEditorInfo: EditorInfo? = null
+    private var initialFocus: AccessibilityNodeInfo? = null
 
     override fun start() {
         if (!ensureActiveOnMain()) return
@@ -37,6 +45,8 @@ internal class Api33TextInsertionVerifier(
             complete(TextInsertionResult.failure("input_connection=no_active_connection"))
             return
         }
+        initialEditorInfo = accessibilityInputMethod.currentInputEditorInfo
+        initialFocus = runCatching(currentInputFocus).getOrNull()
 
         val beforeLength = (text.length + CONFIRMATION_CONTEXT_PADDING)
             .coerceIn(MIN_CONFIRMATION_CONTEXT_LENGTH, MAX_CONFIRMATION_CONTEXT_LENGTH)
@@ -48,8 +58,20 @@ internal class Api33TextInsertionVerifier(
             val before = captureSnapshot(connection, beforeLength)
             mainHandler.post {
                 if (!ensureActiveOnMain()) return@post
+                // Reading surrounding text is asynchronous. The user may have moved to another
+                // editor meanwhile; leave this old connection alone and let the current-focus
+                // ACTION_SET_TEXT / paste path handle the result instead.
+                if (!isCurrentInputTarget()) {
+                    complete(TextInsertionResult.failure("input_connection=focus_changed_before_commit"))
+                    return@post
+                }
+                val currentConnection = service.inputMethod?.currentInputConnection
+                if (currentConnection == null) {
+                    complete(TextInsertionResult.failure("input_connection=no_active_connection"))
+                    return@post
+                }
                 val commitError = runCatching {
-                    connection.commitText(text, 1, null)
+                    currentConnection.commitText(text, 1, null)
                 }.exceptionOrNull()
                 if (commitError != null) {
                     complete(
@@ -59,6 +81,7 @@ internal class Api33TextInsertionVerifier(
                     )
                     return@post
                 }
+                committed = true
                 if (before == null || !before.isValid() || text.isEmpty()) {
                     complete(
                         TextInsertionResult.unconfirmed(
@@ -69,7 +92,7 @@ internal class Api33TextInsertionVerifier(
                     return@post
                 }
                 scheduleVerification(
-                    connection = connection,
+                    connection = currentConnection,
                     beforeLength = beforeLength,
                     before = before,
                     index = 0,
@@ -86,8 +109,18 @@ internal class Api33TextInsertionVerifier(
         completed = true
         mainHandler.removeCallbacksAndMessages(null)
         executor.shutdownNow()
+        initialFocus = null
         if (shouldReportFailure) {
-            callback(TextInsertionResult.failure("input_connection=service_destroyed"))
+            callback(
+                if (committed) {
+                    TextInsertionResult.unconfirmed(
+                        TextInsertionMethod.INPUT_CONNECTION,
+                        "input_connection=service_destroyed_after_commit",
+                    )
+                } else {
+                    TextInsertionResult.failure("input_connection=service_destroyed")
+                },
+            )
         }
     }
 
@@ -99,6 +132,15 @@ internal class Api33TextInsertionVerifier(
         observations: List<TextInsertionObservation>,
     ) {
         if (!ensureActiveOnMain()) return
+        if (!isCurrentInputTarget()) {
+            complete(
+                TextInsertionResult.unconfirmed(
+                    TextInsertionMethod.INPUT_CONNECTION,
+                    "input_connection=focus_changed_after_commit",
+                ),
+            )
+            return
+        }
         mainHandler.postDelayed(
             {
                 if (!ensureActiveOnMain()) return@postDelayed
@@ -132,6 +174,15 @@ internal class Api33TextInsertionVerifier(
         observations: List<TextInsertionObservation>,
     ) {
         if (!ensureActiveOnMain()) return
+        if (!isCurrentInputTarget()) {
+            complete(
+                TextInsertionResult.unconfirmed(
+                    TextInsertionMethod.INPUT_CONNECTION,
+                    "input_connection=focus_changed_after_commit",
+                ),
+            )
+            return
+        }
         if (observations.last() == TextInsertionObservation.CONFIRMED) {
             complete(
                 TextInsertionResult.success(
@@ -181,6 +232,12 @@ internal class Api33TextInsertionVerifier(
 
     private fun canContinue(): Boolean = active && shouldContinue()
 
+    private fun isCurrentInputTarget(): Boolean {
+        if (service.inputMethod?.currentInputEditorInfo !== initialEditorInfo) return false
+        val focused = runCatching(currentInputFocus).getOrNull()
+        return focused == initialFocus
+    }
+
     private fun ensureActiveOnMain(): Boolean {
         if (!active || completed) return false
         if (!shouldContinue()) {
@@ -196,6 +253,7 @@ internal class Api33TextInsertionVerifier(
         completed = true
         mainHandler.removeCallbacksAndMessages(null)
         executor.shutdownNow()
+        initialFocus = null
         callback(result)
     }
 
@@ -205,6 +263,7 @@ internal class Api33TextInsertionVerifier(
         completed = true
         mainHandler.removeCallbacksAndMessages(null)
         executor.shutdownNow()
+        initialFocus = null
         callback(TextInsertionResult.failure("input_connection=cancelled"))
     }
 

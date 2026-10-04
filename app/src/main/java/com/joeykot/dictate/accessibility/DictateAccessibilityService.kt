@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.overlay.OverlayController
 
@@ -13,6 +14,10 @@ class DictateAccessibilityService : AccessibilityService() {
     private var overlayController: OverlayController? = null
     private var activeVerification: PendingTextInsertionVerification? = null
     private var activeVerificationToken: Any? = null
+    private var selectionSource: AccessibilityNodeInfo? = null
+    private var activeSelectionRead: Api33SelectedTextReader? = null
+    private var selectionReadToken: Any? = null
+    private var selectionRevision = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -25,7 +30,31 @@ class DictateAccessibilityService : AccessibilityService() {
         ).also { it.show() }
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
+                selectionRevision++
+                clearSelectionSource()
+                // Keep only a node handle, never an old text snapshot. selectedText refreshes it.
+                selectionSource = runCatching { event.source }.getOrNull()
+            }
+            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                selectionRevision++
+                val source = runCatching { event.source }.getOrNull()
+                if (source != selectionSource) clearSelectionSource()
+                source?.recycleBeforeApi33()
+            }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+            -> {
+                val source = selectionSource
+                if (source != null && !runCatching { source.refresh() }.getOrDefault(false)) {
+                    clearSelectionSource()
+                }
+            }
+        }
+    }
 
     override fun onInterrupt() = Unit
 
@@ -39,6 +68,12 @@ class DictateAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        selectionReadToken = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activeSelectionRead?.destroy()
+            activeSelectionRead = null
+        }
+        clearSelectionSource()
         overlayController?.remove()
         overlayController = null
         if (currentInstance === this) currentInstance = null
@@ -46,6 +81,142 @@ class DictateAccessibilityService : AccessibilityService() {
         activeVerification = null
         activeVerificationToken = null
         super.onDestroy()
+    }
+
+    /** Custom editors may expose their selection only through the current input connection. */
+    fun readSelectedText(shouldContinue: () -> Boolean, callback: (String?) -> Unit) {
+        selectionReadToken = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activeSelectionRead?.destroy()
+            activeSelectionRead = null
+        }
+        if (!shouldContinue()) return
+        val selected = selectedText()
+        if (selected != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            callback(selected)
+            return
+        }
+
+        val token = Any()
+        val revision = selectionRevision
+        var originalWindows: Set<Int>? = null
+        selectionReadToken = token
+        val reader = Api33SelectedTextReader(
+            service = this,
+            shouldContinue = {
+                selectionReadToken === token && selectionRevision == revision && shouldContinue()
+            },
+            currentInputFocus = ::findCurrentInputFocus,
+            isEditorInCurrentWindow = { packageName ->
+                val windows = currentSelectionEditorWindows(packageName)
+                if (originalWindows == null) originalWindows = windows
+                windows != null && windows == originalWindows
+            },
+            callback = { result ->
+                if (selectionReadToken === token) {
+                    selectionReadToken = null
+                    activeSelectionRead = null
+                    callback(result)
+                }
+            },
+        )
+        activeSelectionRead = reader
+        reader.start()
+    }
+
+    private fun currentSelectionEditorWindows(packageName: String): Set<Int>? {
+        val roots = currentTextRoots()
+        try {
+            val windowIds = roots.filter { it.packageName?.toString() == packageName }.map { it.windowId }.toSet()
+            if (windowIds.isEmpty()) return null
+            val source = selectionSource ?: return windowIds
+            if (source.windowId !in windowIds || !source.refresh()) return null
+            // A selection event from a different, read-only node must not resurrect an old
+            // selection in the editor that happens to retain input focus in this window.
+            val focused = findCurrentInputFocus()
+            return try {
+                val isCurrentFocus = source == focused || (focused == null && source.isFocused)
+                windowIds.takeIf {
+                    isCurrentFocus && source.isVisibleToUser && !source.isPassword && !source.isShowingHintText
+                }
+            } finally {
+                focused?.recycleBeforeApi33()
+            }
+        } catch (_: RuntimeException) {
+            return null
+        } finally {
+            roots.forEach { it.recycleBeforeApi33() }
+        }
+    }
+
+    /** Returns a snapshot of the current selection without changing the user's clipboard. */
+    fun selectedText(): String? {
+        val roots = currentTextRoots()
+        try {
+            val source = selectionSource
+            if (source != null) {
+                val current = runCatching {
+                    roots.any { it.windowId == source.windowId } && source.refresh()
+                }.getOrDefault(false)
+                // A collapsed latest selection is authoritative too: do not fall through to
+                // another node that still exposes an unrelated old selection in this window.
+                if (current) return source.currentSelectedText()
+                clearSelectionSource()
+            }
+            for (root in roots) {
+                for (focusType in intArrayOf(
+                    AccessibilityNodeInfo.FOCUS_INPUT,
+                    AccessibilityNodeInfo.FOCUS_ACCESSIBILITY,
+                )) {
+                    val focused = runCatching { root.findFocus(focusType) }.getOrNull() ?: continue
+                    try {
+                        focused.currentSelectedText(refreshFirst = true)?.let { return it }
+                    } finally {
+                        focused.recycleBeforeApi33()
+                    }
+                }
+                // Read-only selectable TextViews and WebViews need not hold input focus.
+                findSelectedTextInTree(root)?.let { return it }
+            }
+            return null
+        } finally {
+            roots.forEach { it.recycleBeforeApi33() }
+        }
+    }
+
+    private fun AccessibilityNodeInfo.currentSelectedText(refreshFirst: Boolean = false): String? = runCatching {
+        // Focus lookups can return a cached node with no range even though it now has a selection.
+        if (refreshFirst && !refresh()) return@runCatching null
+        if (!isVisibleToUser || isPassword || isShowingHintText) return@runCatching null
+        val selected = selectedTextInRange(text, textSelectionStart, textSelectionEnd) ?: return@runCatching null
+        if (refreshFirst) return@runCatching selected
+        // Nodes returned by window/tree lookups may themselves come from Android's cache.
+        if (!refresh() || !isVisibleToUser || isPassword || isShowingHintText) return@runCatching null
+        selectedTextInRange(text, textSelectionStart, textSelectionEnd)
+    }.getOrNull()
+
+    private fun findSelectedTextInTree(root: AccessibilityNodeInfo): String? {
+        var remaining = MAX_SELECTION_SEARCH_NODES
+        fun visit(node: AccessibilityNodeInfo, depth: Int): String? {
+            if (remaining-- <= 0 || depth > MAX_SELECTION_SEARCH_DEPTH) return null
+            node.currentSelectedText()?.let { return it }
+            for (index in 0 until node.childCount) {
+                if (remaining <= 0) break
+                val child = runCatching { node.getChild(index) }.getOrNull() ?: continue
+                try {
+                    visit(child, depth + 1)?.let { return it }
+                } finally {
+                    child.recycleBeforeApi33()
+                }
+            }
+            return null
+        }
+        return runCatching { visit(root, 0) }.getOrNull()
+    }
+
+    private fun clearSelectionSource() {
+        selectionSource?.recycleBeforeApi33()
+        selectionSource = null
     }
 
     internal fun tryInsertAtCurrentCursor(
@@ -109,6 +280,7 @@ class DictateAccessibilityService : AccessibilityService() {
             service = this,
             text = text,
             shouldContinue = shouldContinue,
+            currentInputFocus = ::findCurrentInputFocus,
             callback = verificationComplete@{ result ->
                 if (activeVerificationToken !== token) return@verificationComplete
                 activeVerification = null
@@ -144,18 +316,21 @@ class DictateAccessibilityService : AccessibilityService() {
                 nodeText = focused.text,
                 isShowingHintText = focused.isShowingHintText,
             )
-            val selectionStart = focused.textSelectionStart
-            val cursor = if (selectionStart in 0..existing.length) selectionStart else existing.length
-            val updated = existing.substring(0, cursor) + text + existing.substring(cursor)
+            val replacement = replaceCurrentSelection(
+                existing = existing,
+                selectionStart = focused.textSelectionStart,
+                selectionEnd = focused.textSelectionEnd,
+                insertedText = text,
+            ) ?: return TextInsertionResult.failure("set_text=selection_unavailable $metadata")
             val arguments = Bundle().apply {
                 putCharSequence(
                     AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    updated,
+                    replacement.text,
                 )
             }
             val inserted = focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
             if (inserted) {
-                val newCursor = cursor + text.length
+                val newCursor = replacement.cursor
                 val selection = Bundle().apply {
                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, newCursor)
                     putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, newCursor)
@@ -176,23 +351,50 @@ class DictateAccessibilityService : AccessibilityService() {
     }
 
     private fun findCurrentInputFocus(): AccessibilityNodeInfo? {
-        rootInActiveWindow?.let { root ->
-            try {
+        val roots = currentTextRoots()
+        try {
+            for (root in roots) {
                 root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { return it }
-            } finally {
-                root.recycleBeforeApi33()
             }
-        }
-        for (window in windows.orEmpty().sortedByDescending { it.layer }) {
-            val root = window.root ?: continue
-            val focused = try {
-                root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            } finally {
-                root.recycleBeforeApi33()
-            }
-            if (focused != null) return focused
+        } finally {
+            roots.forEach { it.recycleBeforeApi33() }
         }
         return null
+    }
+
+    private fun currentTextRoots(): List<AccessibilityNodeInfo> {
+        val visibleWindows = runCatching { windows.orEmpty() }.getOrDefault(emptyList())
+        try {
+            val contentWindows = visibleWindows
+                .filter {
+                    it.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
+                        it.type != AccessibilityWindowInfo.TYPE_INPUT_METHOD
+                }
+                .sortedByDescending { it.layer }
+            val current = contentWindows.filter { it.isActive }
+                .ifEmpty { contentWindows.filter { it.isFocused } }
+                .ifEmpty {
+                    contentWindows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }.take(1)
+                }
+            val roots = current.mapNotNull { runCatching { it.root }.getOrNull() }
+            if (roots.isNotEmpty()) return roots
+            val root = runCatching { rootInActiveWindow }.getOrNull() ?: return emptyList()
+            val window = visibleWindows.firstOrNull { it.id == root.windowId }
+            if (window != null && (
+                    window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY ||
+                        window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD
+                    )
+            ) {
+                root.recycleBeforeApi33()
+                return emptyList()
+            }
+            return listOf(root)
+        } finally {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                @Suppress("DEPRECATION")
+                visibleWindows.forEach { it.recycle() }
+            }
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -220,6 +422,8 @@ class DictateAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val MAX_DIAGNOSTIC_IDENTIFIER_LENGTH = 120
+        private const val MAX_SELECTION_SEARCH_NODES = 1_024
+        private const val MAX_SELECTION_SEARCH_DEPTH = 64
 
         @Volatile
         private var currentInstance: DictateAccessibilityService? = null

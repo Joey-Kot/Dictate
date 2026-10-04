@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_input_sample_rate">输入采样率必须为正数</string>
+    <string name="settings_sample_rate_unsupported">采样率不受支持</string>
+    <string name="settings_max_retries">最大重试次数必须在 0 到 10 之间</string>
+    <string name="settings_initial_backoff">初始退避时间必须在 0.1 到 60 秒之间</string>
+    <string name="settings_long_press">长按阈值必须在 300 到 5000 ms 之间</string>
+    <string name="settings_double_tap">双击间隔必须在 150 到 1000 ms 之间</string>
+    <string name="settings_recording_color">录制颜色必须是 #RRGGBB</string>
+    <string name="settings_paused_color">暂停颜色必须是 #RRGGBB</string>
+    <string name="settings_processing_color">处理颜色必须是 #RRGGBB</string>
+    <string name="settings_write_thread">设置写入不能在主线程执行</string>
+    <string name="settings_write_failed">设置写入失败</string>
+    <string name="settings_prompt_save_failed">提示词保存失败</string>
+    <string name="settings_base_url_invalid">Base URL 无效</string>
+    <string name="settings_additional_invalid">附加参数无效</string>
+    <string name="settings_post_base_url">后处理 Base URL 必须是有效的 HTTP 或 HTTPS 地址</string>
+    <string name="settings_import_json">导入文件不是有效的 JSON 对象</string>
+    <string name="settings_schema_version">不支持的配置 schemaVersion</string>
+    <string name="settings_channels">audioOutput.channels 只能为 1</string>
+    <string name="settings_codec_invalid">audioOutput.codec 无效</string>
+    <string name="settings_container_invalid">audioOutput.container 无效</string>
+    <string name="settings_language_unsupported">不支持的界面语言</string>
+    <string name="settings_import_api_key">导入文件包含 API Key，需要明确确认</string>
+    <string name="settings_color_scheme_invalid">display.colorScheme 无效</string>
+    <string name="settings_bit_depth">位深必须为以下数值之一：%1$s 位</string>
+    <string name="settings_codec_bitrate">%1$s 编码在当前采样率下不支持该码率</string>
+    <string name="settings_codec_container">%1$s 编码不能使用 %2$s 容器</string>
+    <string name="settings_button_scale">按钮大小必须在 %1$s 到 %2$s 之间</string>
+    <string name="settings_button_opacity">按钮不透明度必须在 %1$s 到 %2$s 之间</string>
+    <string name="settings_field_object">%1$s 必须是 JSON 对象</string>
+    <string name="settings_field_string">%1$s 必须是字符串</string>
+    <string name="settings_field_boolean">%1$s 必须是布尔值</string>
+    <string name="settings_field_integer">%1$s 必须是整数</string>
+    <string name="settings_field_finite">%1$s 必须是有限数字</string>
+    <string name="settings_field_number">%1$s 必须是数字</string>
+    <string name="settings_field_rgb">%1$s 必须是 #RRGGBB</string>
+    <string name="settings_field_missing">缺少字段 %1$s</string>
+    <string name="settings_field_null">%1$s 不能为 null</string>
+</resources>

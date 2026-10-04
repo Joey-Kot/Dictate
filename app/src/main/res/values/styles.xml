@@ -8,5 +8,12 @@
         <item name="android:statusBarColor">#FAFAFA</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+    <style name="Theme.Dictate.MenuBackdrop" parent="android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowElevation">0dp</item>
+    </style>
 </resources>
-

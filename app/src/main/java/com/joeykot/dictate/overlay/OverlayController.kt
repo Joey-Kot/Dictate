@@ -1,16 +1,22 @@
 package com.joeykot.dictate.overlay
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
 import android.view.Gravity
+import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityWindowInfo
 import com.joeykot.dictate.accessibility.DictateAccessibilityService
 import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.job.VoiceJobController
 import com.joeykot.dictate.model.JobUiState
+import com.joeykot.dictate.model.JobState
+import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.settings.SettingsRepository
 import kotlin.math.roundToInt
 
@@ -40,6 +46,8 @@ class OverlayController(
     private var shown = false
     private var dragStartX = 0
     private var dragStartY = 0
+    private var menuView: PostProcessingMenuView? = null
+    private var menuBackdrop: PostProcessingMenuBackdrop? = null
 
     init {
         view.setDisplayConfig(displayConfig)
@@ -62,6 +70,7 @@ class OverlayController(
         windowManager.addView(view, layoutParams)
         shown = true
         voiceJobs.addListener(listener)
+        voiceJobs.setPostProcessingMenuListener(::showPostProcessingMenu)
         view.setJobUiState(voiceJobs.currentState())
         view.post {
             if (shown) reclipAndPersistPosition()
@@ -69,6 +78,8 @@ class OverlayController(
     }
 
     fun remove() {
+        voiceJobs.setPostProcessingMenuListener(null)
+        removeMenuImmediately()
         voiceJobs.removeListener(listener)
         view.cancelPendingGestures()
         if (shown) runCatching { windowManager.removeViewImmediate(view) }
@@ -80,6 +91,7 @@ class OverlayController(
     }
 
     fun refreshAppearance() {
+        removeMenuImmediately()
         if (!shown) {
             applyDisplayConfig(settingsRepository.get().display)
             return
@@ -113,6 +125,97 @@ class OverlayController(
 
     private fun onStateChanged(state: JobUiState) {
         view.setJobUiState(state)
+        if (state.state != JobState.IDLE) closeMenu()
+    }
+
+    private fun showPostProcessingMenu(input: String, prompts: List<PromptConfig>) {
+        if (!shown || menuView != null || prompts.isEmpty()) return
+        view.cancelPendingGestures()
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val image = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(image))
+        val menu = PostProcessingMenuView(
+            context = service,
+            prompts = prompts,
+            buttonScreenBounds = Rect(location[0], location[1], location[0] + sizePx, location[1] + sizePx),
+            buttonImage = image,
+            availableScreenBounds = ::menuScreenBounds,
+            onSelect = { prompt ->
+                closeMenu()
+                voiceJobs.startPostProcessing(input, prompt.id)
+            },
+            onDismiss = ::closeMenu,
+            onPanelChanged = { bounds, cornerRadius, expansion ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    menuBackdrop?.updatePanel(bounds, cornerRadius, expansion)
+                }
+            },
+        )
+        val menuParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            title = "Dictate post-processing menu"
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        }
+        menuView = menu
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                menuBackdrop = runCatching {
+                    PostProcessingMenuBackdrop(service, menu::setBackgroundBlurEnabled).also { it.show() }
+                }.getOrNull()
+            }
+            windowManager.addView(menu, menuParams)
+            view.visibility = View.INVISIBLE
+        } catch (_: RuntimeException) {
+            removeMenuImmediately()
+        }
+    }
+
+    private fun closeMenu() {
+        val menu = menuView ?: return
+        menu.close {
+            if (menuView === menu) removeMenuImmediately()
+        }
+    }
+
+    private fun removeMenuImmediately() {
+        val menu = menuView ?: return
+        menuView = null
+        menu.dispose()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            menuBackdrop?.dispose()
+            menuBackdrop = null
+        }
+        runCatching { windowManager.removeViewImmediate(menu) }
+        view.visibility = View.VISIBLE
+    }
+
+    private fun menuScreenBounds(): Rect {
+        val safe = safeBounds()
+        val bounds = Rect(safe.minX, safe.minY, safe.maxX + sizePx, safe.maxY + sizePx)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = windowManager.currentWindowMetrics
+            val ime = (menuView?.rootWindowInsets ?: metrics.windowInsets).getInsets(WindowInsets.Type.ime())
+            if (ime.bottom > 0) bounds.bottom = minOf(bounds.bottom, metrics.bounds.height() - ime.bottom)
+        }
+        // Accessibility windows also report keyboards on Android versions before WindowInsets.Type.ime.
+        runCatching {
+            service.windows.filter { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }.forEach { window ->
+                val keyboard = Rect()
+                window.getBoundsInScreen(keyboard)
+                if (!keyboard.isEmpty && keyboard.top > bounds.top && keyboard.left < bounds.right && keyboard.right > bounds.left) {
+                    bounds.bottom = minOf(bounds.bottom, keyboard.top)
+                }
+            }
+        }
+        bounds.bottom = maxOf(bounds.top + 1, bounds.bottom)
+        return bounds
     }
 
     private fun updateLayout() {

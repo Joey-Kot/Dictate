@@ -4,13 +4,15 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -28,11 +30,18 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.Switch
+import android.widget.TableLayout
+import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
 import com.joeykot.dictate.DictateApplication
+import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppLocale
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.accessibility.DictateAccessibilityService
+import com.joeykot.dictate.audio.RecordingService
 import com.joeykot.dictate.model.AppSettings
+import com.joeykot.dictate.model.AppLanguage
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.AudioContainer
@@ -60,6 +69,7 @@ class MainActivity : Activity() {
 
     private lateinit var accessibilityStatus: TextView
     private lateinit var microphoneStatus: TextView
+    private lateinit var languageSpinner: Spinner
 
     private lateinit var bitDepthSpinner: Spinner
     private lateinit var sampleRateSpinner: Spinner
@@ -77,6 +87,9 @@ class MainActivity : Activity() {
     private lateinit var additionalJsonInput: EditText
     private lateinit var testButton: Button
     private lateinit var testResult: TextView
+    private lateinit var postProcessingSection: PostProcessingSettingsView
+    private var pendingIconEditorId: String? = null
+    private var editorStateSaved = false
 
     private lateinit var retryEnabled: Switch
     private lateinit var maxRetriesInput: EditText
@@ -86,6 +99,7 @@ class MainActivity : Activity() {
     private lateinit var doubleTapInput: EditText
 
     private lateinit var buttonScaleSeekBar: SeekBar
+    private lateinit var notificationsEnabled: Switch
     private lateinit var buttonScaleValue: TextView
     private lateinit var buttonOpacitySeekBar: SeekBar
     private lateinit var buttonOpacityValue: TextView
@@ -115,10 +129,16 @@ class MainActivity : Activity() {
         val value: TextView,
     )
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildContentView())
         loadSettingsIntoForm()
+        pendingIconEditorId = savedInstanceState?.getString(STATE_ICON_EDITOR_ID)
+        savedInstanceState?.getBundle(STATE_PROMPT_EDITOR)?.let(postProcessingSection::restoreEditorState)
         if (intent.getBooleanExtra(EXTRA_REQUEST_MICROPHONE, false)) {
             window.decorView.post { requestMicrophonePermissions() }
         }
@@ -126,11 +146,33 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        editorStateSaved = false
+        if (recreateForLanguageChange()) return
         refreshPermissionStatus()
+    }
+
+    private fun recreateForLanguageChange(): Boolean {
+        val savedLanguage = AppLocale.readLanguage(this).tag
+        if (resources.configuration.locales[0].language == Locale.forLanguageTag(savedLanguage).language) {
+            return false
+        }
+        recreate()
+        return true
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_ICON_EDITOR_ID, pendingIconEditorId)
+        outState.putBundle(STATE_PROMPT_EDITOR, postProcessingSection.saveEditorState())
+        editorStateSaved = true
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
         activityDestroyed = true
+        if (::postProcessingSection.isInitialized) {
+            postProcessingSection.closeEditor(preserveDraft = isChangingConfigurations || (editorStateSaved && !isFinishing))
+        }
+        pendingIconEditorId = null
         settingsExecutor.shutdown()
         super.onDestroy()
     }
@@ -138,6 +180,14 @@ class MainActivity : Activity() {
     @Deprecated("Uses the platform document picker for broad API 26 compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ICON) {
+            val editorId = pendingIconEditorId
+            pendingIconEditorId = null
+            if (resultCode == RESULT_OK && editorId != null) {
+                data?.data?.let { postProcessingSection.onIconPicked(editorId, it) }
+            }
+            return
+        }
         if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         when (requestCode) {
@@ -155,7 +205,7 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_MICROPHONE) {
             refreshPermissionStatus()
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                toast("未授予麦克风权限，无法开始录音")
+                toast(getString(R.string.main_microphone_denied))
             }
         }
     }
@@ -177,42 +227,57 @@ class MainActivity : Activity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "Dictate"
+            text = getString(R.string.main_title)
             textSize = 28f
             setTypeface(typeface, Typeface.BOLD)
-        })
-        root.addView(TextView(this).apply {
-            text = "语音转写增强层，不注册或抢占系统输入法。"
-            textSize = 14f
-            setTextColor(Color.GRAY)
-            setPadding(0, dp(4), 0, dp(16))
-        })
+            gravity = Gravity.CENTER
+            setPadding(0, dp(20), 0, dp(20))
+        }, matchWrap())
 
         root.addView(buildSetupPanel())
-        root.addView(sectionTitle("1. 音频输出"))
+        root.addView(sectionTitle(getString(R.string.main_language)))
+        root.addView(buildLanguageSection())
+        root.addView(sectionTitle(getString(R.string.main_audio_section)))
         root.addView(buildAudioSection())
-        root.addView(sectionTitle("2. OpenAI Compatible"))
+        root.addView(sectionTitle(getString(R.string.main_provider_section)))
         root.addView(buildProviderSection())
-        root.addView(sectionTitle("3. 重试"))
+        root.addView(sectionTitle(getString(R.string.main_post_processing_section)))
+        postProcessingSection = PostProcessingSettingsView(
+            activity = this,
+            repository = settingsRepository,
+            enqueueWrite = { operation, onSuccess, onFailure ->
+                enqueueSettingsWrite(operation, onSuccess, onFailure)
+            },
+            chooseIcon = { editorId -> beginIconImport(editorId) },
+            testConnection = { config, apiKey, callback ->
+                val runtime = settingsRepository.runtime()
+                app.voiceJobController.testPostProcessingConnection(
+                    runtime.copy(app = runtime.app.copy(postProcessing = config), postProcessingApiKey = apiKey),
+                    callback,
+                )
+            },
+        )
+        root.addView(postProcessingSection)
+        root.addView(sectionTitle(getString(R.string.main_retry_section)))
         root.addView(buildRetrySection())
-        root.addView(sectionTitle("4. 交互"))
+        root.addView(sectionTitle(getString(R.string.main_interaction_section)))
         root.addView(buildInteractionSection())
-        root.addView(sectionTitle("5. 显示"))
+        root.addView(sectionTitle(getString(R.string.main_display_section)))
         root.addView(buildDisplaySection())
 
         root.addView(Button(this).apply {
-            text = "保存设置"
+            text = getString(R.string.main_save_settings)
             setOnClickListener { saveSettings(showConfirmation = true) }
         }, matchWrap(top = 20))
 
         val transferRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(Button(this@MainActivity).apply {
-                text = "导出 JSON"
+                text = getString(R.string.main_export_json)
                 setOnClickListener { beginExport() }
             }, weighted())
             addView(Button(this@MainActivity).apply {
-                text = "导入 JSON"
+                text = getString(R.string.main_import_json)
                 setOnClickListener { beginImport() }
             }, weighted(left = 8))
         }
@@ -221,9 +286,9 @@ class MainActivity : Activity() {
         val diagnosticsButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(Button(this@MainActivity).apply {
-                text = "诊断详情"
+                text = getString(R.string.main_diagnostics_details)
                 setOnClickListener {
-                    diagnosticsText.text = app.diagnostics.snapshot().ifBlank { "暂无诊断信息" }
+                    diagnosticsText.text = app.diagnostics.snapshot().ifBlank { getString(R.string.main_no_diagnostics) }
                     diagnosticsText.visibility = if (diagnosticsText.visibility == View.VISIBLE) {
                         View.GONE
                     } else {
@@ -232,11 +297,11 @@ class MainActivity : Activity() {
                 }
             }, weighted())
             addView(Button(this@MainActivity).apply {
-                text = "清理诊断"
+                text = getString(R.string.main_clear_diagnostics)
                 setOnClickListener {
                     app.diagnostics.clear()
-                    diagnosticsText.text = "暂无诊断信息"
-                    toast("诊断信息已清理；设置和上一条录音未受影响")
+                    diagnosticsText.text = getString(R.string.main_no_diagnostics)
+                    toast(getString(R.string.main_diagnostics_cleared))
                 }
             }, weighted(left = 8))
         }
@@ -249,8 +314,39 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
         root.addView(diagnosticsText, matchWrap(top = 4))
+        root.addView(sectionTitle(getString(R.string.main_about)))
+        root.addView(buildAboutSection(), matchWrap())
 
         return scroll
+    }
+
+    private fun buildAboutSection(): View = TableLayout(this).apply {
+        setColumnStretchable(1, true)
+        setColumnShrinkable(1, true)
+        val version = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+        val entries = listOf(
+            R.string.main_about_author to "Joey Kot",
+            R.string.main_about_email to "joey.kot.x@gmail.com",
+            R.string.main_about_license to "GPL-3.0-or-later",
+            R.string.main_about_repo to "github.com/Joey-Kot/Dictate",
+            R.string.main_about_version to version,
+        )
+        entries.forEach { (label, value) ->
+            addView(TableRow(this@MainActivity).apply {
+                addView(TextView(this@MainActivity).apply {
+                    text = getString(label)
+                    textSize = 14f
+                    setTextColor(Color.GRAY)
+                    setPadding(0, dp(6), dp(16), dp(6))
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = value
+                    textSize = 14f
+                    setTextIsSelectable(true)
+                    setPadding(0, dp(6), 0, dp(6))
+                })
+            })
+        }
     }
 
     private fun buildSetupPanel(): View = LinearLayout(this).apply {
@@ -261,7 +357,7 @@ class MainActivity : Activity() {
         accessibilityStatus = TextView(this@MainActivity)
         addView(accessibilityStatus)
         addView(Button(this@MainActivity).apply {
-            text = "打开无障碍设置"
+            text = getString(R.string.main_open_accessibility)
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
@@ -270,27 +366,37 @@ class MainActivity : Activity() {
         microphoneStatus = TextView(this@MainActivity).apply { setPadding(0, dp(10), 0, 0) }
         addView(microphoneStatus)
         addView(Button(this@MainActivity).apply {
-            text = "授予麦克风权限"
+            text = getString(R.string.main_grant_microphone)
             setOnClickListener { requestMicrophonePermissions() }
         }, matchWrap(top = 6))
     }
 
+    private fun buildLanguageSection(): View = verticalGroup().apply {
+        languageSpinner = spinner(AppLanguage.entries.map { it.nativeName })
+        addView(languageSpinner, matchWrap())
+        addView(TextView(this@MainActivity).apply {
+            text = getString(R.string.main_language_help)
+            setTextColor(Color.GRAY)
+            setPadding(0, dp(4), 0, 0)
+        })
+    }
+
     private fun buildAudioSection(): View = verticalGroup().apply {
-        bitDepthSpinner = spinner(AudioConfig.BIT_DEPTHS.map { "$it 位" })
-        bitDepthRow = labeledRow("位深度", bitDepthSpinner)
+        bitDepthSpinner = spinner(AudioConfig.BIT_DEPTHS.map { getString(R.string.main_bit_depth_value, it) })
+        bitDepthRow = labeledRow(getString(R.string.main_bit_depth), bitDepthSpinner)
         addView(bitDepthRow)
 
         sampleRateSpinner = spinner(AudioConfig.SAMPLE_RATES.map(::formatSampleRate))
-        addView(labeledRow("输出采样率", sampleRateSpinner))
+        addView(labeledRow(getString(R.string.main_sample_rate), sampleRateSpinner))
 
         codecSpinner = spinner(AudioCodec.entries.map { codecLabel(it) })
-        addView(labeledRow("编码", codecSpinner))
+        addView(labeledRow(getString(R.string.main_codec), codecSpinner))
 
         containerSpinner = spinner(emptyList())
-        addView(labeledRow("容器", containerSpinner))
+        addView(labeledRow(getString(R.string.main_container), containerSpinner))
 
         bitrateSpinner = spinner(emptyList())
-        bitrateRow = labeledRow("码率", bitrateSpinner)
+        bitrateRow = labeledRow(getString(R.string.main_bitrate), bitrateSpinner)
         addView(bitrateRow)
 
         codecSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -328,29 +434,29 @@ class MainActivity : Activity() {
     }
 
     private fun buildProviderSection(): View = verticalGroup().apply {
-        addView(labeledRow("Provider", spinner(listOf("OpenAI Compatible")).apply { isEnabled = false }))
-        baseUrlInput = editText("https://example.com 或 https://example.com/v1")
-        addView(labeledColumn("Base URL", baseUrlInput))
+        addView(labeledRow(getString(R.string.main_provider), spinner(listOf("OpenAI Compatible")).apply { isEnabled = false }))
+        baseUrlInput = editText(getString(R.string.main_base_url_hint))
+        addView(labeledColumn(getString(R.string.main_base_url), baseUrlInput))
 
-        apiKeyInput = editText("API Key").apply {
+        apiKeyInput = editText(getString(R.string.main_api_key)).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        addView(labeledColumn("API Key", apiKeyInput))
+        addView(labeledColumn(getString(R.string.main_api_key), apiKeyInput))
 
-        modelInput = editText("例如 whisper-1")
-        addView(labeledColumn("Model", modelInput))
+        modelInput = editText(getString(R.string.main_model_hint))
+        addView(labeledColumn(getString(R.string.main_model), modelInput))
 
-        additionalJsonInput = editText("可留空，或填写扁平 JSON 对象").apply {
+        additionalJsonInput = editText(getString(R.string.main_additional_json_hint)).apply {
             setSingleLine(false)
             minLines = 4
             gravity = Gravity.TOP
             typeface = Typeface.MONOSPACE
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
-        addView(labeledColumn("附加参数 JSON", additionalJsonInput))
+        addView(labeledColumn(getString(R.string.main_additional_json), additionalJsonInput))
 
         testButton = Button(this@MainActivity).apply {
-            text = "测试连接（真实转写请求）"
+            text = getString(R.string.main_test_connection)
             setOnClickListener { runConnectionTest() }
         }
         addView(testButton, matchWrap(top = 10))
@@ -362,25 +468,25 @@ class MainActivity : Activity() {
     }
 
     private fun buildRetrySection(): View = verticalGroup().apply {
-        retryEnabled = Switch(this@MainActivity).apply { text = "自动重试（默认关闭）" }
+        retryEnabled = Switch(this@MainActivity).apply { text = getString(R.string.main_auto_retry) }
         addView(retryEnabled)
         maxRetriesInput = numericEditText()
-        addView(labeledRow("最大重试次数", maxRetriesInput))
+        addView(labeledRow(getString(R.string.main_max_retries), maxRetriesInput))
         initialBackoffInput = decimalEditText()
-        addView(labeledRow("初始退避（秒）", initialBackoffInput))
+        addView(labeledRow(getString(R.string.main_initial_backoff), initialBackoffInput))
     }
 
     private fun buildInteractionSection(): View = verticalGroup().apply {
         alwaysCopyToClipboard = Switch(this@MainActivity).apply {
-            text = "始终复制转写结果到剪贴板（默认开启）"
+            text = getString(R.string.main_always_copy)
         }
         addView(alwaysCopyToClipboard)
         longPressInput = numericEditText()
-        addView(labeledRow("长按阈值（ms）", longPressInput))
+        addView(labeledRow(getString(R.string.main_long_press), longPressInput))
         doubleTapInput = numericEditText()
-        addView(labeledRow("双击最大间隔（ms）", doubleTapInput))
+        addView(labeledRow(getString(R.string.main_double_tap), doubleTapInput))
         addView(TextView(this@MainActivity).apply {
-            text = "长按在抬起时确认；移动超过系统阈值始终优先判为拖动。双击按两次抬起的时间差判定。"
+            text = getString(R.string.main_gesture_help)
             setTextColor(Color.GRAY)
             setPadding(0, dp(8), 0, 0)
         })
@@ -403,7 +509,7 @@ class MainActivity : Activity() {
 
             override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
         })
-        addView(labeledRow("按钮大小", sliderWithValue(buttonScaleSeekBar, buttonScaleValue)))
+        addView(labeledRow(getString(R.string.main_button_size), sliderWithValue(buttonScaleSeekBar, buttonScaleValue)))
 
         buttonOpacitySeekBar = SeekBar(this@MainActivity).apply {
             max = BUTTON_OPACITY_PROGRESS_MAX
@@ -421,28 +527,28 @@ class MainActivity : Activity() {
 
             override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
         })
-        addView(labeledRow("按钮不透明度", sliderWithValue(buttonOpacitySeekBar, buttonOpacityValue)))
+        addView(labeledRow(getString(R.string.main_button_opacity), sliderWithValue(buttonOpacitySeekBar, buttonOpacityValue)))
         addView(TextView(this@MainActivity).apply {
-            text = "透明度会在现有空闲、工作、按压与处理中动画的透明度基础上统一叠乘。"
+            text = getString(R.string.main_opacity_help)
             setTextColor(Color.GRAY)
             setPadding(0, dp(4), 0, dp(4))
         })
 
         colorSchemeSpinner = spinner(OverlayColorScheme.entries.map(::colorSchemeLabel))
-        addView(labeledRow("色系搭配", colorSchemeSpinner))
+        addView(labeledRow(getString(R.string.main_color_scheme), colorSchemeSpinner))
 
         val previewRow = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(8), 0, dp(4))
         }
-        val recordingItem = colorPreviewItem("录制")
+        val recordingItem = colorPreviewItem(getString(R.string.main_recording))
         recordingPreview = recordingItem.first
         previewRow.addView(recordingItem.second, weighted())
-        val pausedItem = colorPreviewItem("暂停")
+        val pausedItem = colorPreviewItem(getString(R.string.main_paused))
         pausedPreview = pausedItem.first
         previewRow.addView(pausedItem.second, weighted(left = 8))
-        val processingItem = colorPreviewItem("处理中")
+        val processingItem = colorPreviewItem(getString(R.string.main_processing))
         processingPreview = processingItem.first
         previewRow.addView(processingItem.second, weighted(left = 8))
         addView(previewRow)
@@ -452,7 +558,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(2), 0, 0)
         }
         recordingColorEditor = colorEditor(
-            label = "录制颜色",
+            label = getString(R.string.main_recording_color),
             currentColor = { customPaletteDraft.recordingColor },
         ) { color ->
             customPaletteDraft = customPaletteDraft.copy(recordingColor = color)
@@ -460,7 +566,7 @@ class MainActivity : Activity() {
         }
         customColorsContainer.addView(recordingColorEditor.row)
         pausedColorEditor = colorEditor(
-            label = "暂停颜色",
+            label = getString(R.string.main_paused_color),
             currentColor = { customPaletteDraft.pausedColor },
         ) { color ->
             customPaletteDraft = customPaletteDraft.copy(pausedColor = color)
@@ -468,7 +574,7 @@ class MainActivity : Activity() {
         }
         customColorsContainer.addView(pausedColorEditor.row)
         processingColorEditor = colorEditor(
-            label = "处理中颜色",
+            label = getString(R.string.main_processing_color),
             currentColor = { customPaletteDraft.processingColor },
         ) { color ->
             customPaletteDraft = customPaletteDraft.copy(processingColor = color)
@@ -484,11 +590,28 @@ class MainActivity : Activity() {
 
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
+
+        notificationsEnabled = Switch(this@MainActivity).apply {
+            text = getString(R.string.main_show_notifications)
+            setOnClickListener {
+                // Only the system can change visibility of foreground-service notifications.
+                // Keep the switch truthful if the user returns without changing that setting.
+                refreshNotificationStatus()
+                openNotificationSettings()
+            }
+        }
+        addView(notificationsEnabled, matchWrap(top = 12))
+        addView(TextView(this@MainActivity).apply {
+            text = getString(R.string.main_notifications_help)
+            setTextColor(Color.GRAY)
+            setPadding(0, dp(4), 0, 0)
+        })
     }
 
     private fun loadSettingsIntoForm() {
         val settings = settingsRepository.get()
         loadingForm = true
+        languageSpinner.setSelection(AppLanguage.entries.indexOf(settings.language).coerceAtLeast(0))
         bitDepthSpinner.setSelection(AudioConfig.BIT_DEPTHS.indexOf(settings.audio.bitDepth).coerceAtLeast(0))
         sampleRateSpinner.setSelection(AudioConfig.SAMPLE_RATES.indexOf(settings.audio.sampleRate).coerceAtLeast(0))
         codecSpinner.setSelection(AudioCodec.entries.indexOf(settings.audio.codec).coerceAtLeast(0))
@@ -502,6 +625,7 @@ class MainActivity : Activity() {
         apiKeyInput.setText(settingsRepository.runtime().apiKey)
         modelInput.setText(settings.provider.model)
         additionalJsonInput.setText(settings.provider.additionalJson)
+        postProcessingSection.load(settings.postProcessing, settingsRepository.runtime().postProcessingApiKey)
         retryEnabled.isChecked = settings.retry.enabled
         maxRetriesInput.setText(settings.retry.maxRetries.toString())
         initialBackoffInput.setText(settings.retry.initialBackoffSeconds.toString())
@@ -523,6 +647,7 @@ class MainActivity : Activity() {
         val container = displayedContainers.getOrNull(containerSpinner.selectedItemPosition)
             ?: AudioConfig.defaultContainer(codec)
         val settings = AppSettings(
+            language = AppLanguage.entries.getOrElse(languageSpinner.selectedItemPosition) { AppLanguage.ENGLISH },
             audio = AudioConfig(
                 bitDepth = AudioConfig.BIT_DEPTHS[bitDepthSpinner.selectedItemPosition],
                 sampleRate = AudioConfig.SAMPLE_RATES[sampleRateSpinner.selectedItemPosition],
@@ -536,18 +661,19 @@ class MainActivity : Activity() {
                 model = modelInput.text.toString().trim(),
                 additionalJson = additionalJsonInput.text.toString().trim(),
             ),
+            postProcessing = postProcessingSection.readConfig(),
             retry = RetryConfig(
                 enabled = retryEnabled.isChecked,
                 maxRetries = maxRetriesInput.text.toString().toIntOrNull()
-                    ?: throw IllegalArgumentException("最大重试次数必须是整数"),
+                    ?: throw IllegalArgumentException(getString(R.string.main_max_retries_integer)),
                 initialBackoffSeconds = initialBackoffInput.text.toString().toDoubleOrNull()
-                    ?: throw IllegalArgumentException("初始退避时间必须是数字"),
+                    ?: throw IllegalArgumentException(getString(R.string.main_backoff_number)),
             ),
             interaction = InteractionConfig(
                 longPressMs = longPressInput.text.toString().toLongOrNull()
-                    ?: throw IllegalArgumentException("长按阈值必须是整数"),
+                    ?: throw IllegalArgumentException(getString(R.string.main_long_press_integer)),
                 doubleTapMs = doubleTapInput.text.toString().toLongOrNull()
-                    ?: throw IllegalArgumentException("双击间隔必须是整数"),
+                    ?: throw IllegalArgumentException(getString(R.string.main_double_tap_integer)),
                 alwaysCopyToClipboard = alwaysCopyToClipboard.isChecked,
             ),
             display = DisplayConfig(
@@ -558,8 +684,8 @@ class MainActivity : Activity() {
             ),
         )
         val errors = settingsRepository.validate(settings)
-        if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("；"))
-        return RuntimeSettings(settings, apiKeyInput.text.toString().trim())
+        if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("\n"))
+        return RuntimeSettings(settings, apiKeyInput.text.toString().trim(), postProcessingSection.readApiKey())
     }
 
     private fun saveSettings(
@@ -569,17 +695,21 @@ class MainActivity : Activity() {
         val runtime = try {
             readRuntimeSettings()
         } catch (error: Exception) {
-            toast(error.message ?: "设置无效")
+            toast(error.message ?: getString(R.string.main_invalid_settings))
             return false
         }
         return enqueueSettingsWrite(
-            operation = { settingsRepository.save(runtime.app, runtime.apiKey) },
-            onSuccess = {
-                refreshOverlayAppearance()
-                if (showConfirmation) toast("设置已保存")
-                onSaved()
+            operation = {
+                settingsRepository.save(runtime.app, runtime.apiKey, runtime.postProcessingApiKey)
             },
-            onFailure = { error -> toast(error.message ?: "设置无效") },
+            onSuccess = {
+                app.voiceJobController.refreshLanguage()
+                refreshOverlayAppearance()
+                if (showConfirmation) toast(AppStrings.get(R.string.main_settings_saved, "Settings saved"))
+                onSaved()
+                if (showConfirmation) recreateForLanguageChange()
+            },
+            onFailure = { error -> toast(error.message ?: getString(R.string.main_invalid_settings)) },
         )
     }
 
@@ -589,7 +719,7 @@ class MainActivity : Activity() {
         onFailure: (Exception) -> Unit,
     ): Boolean {
         if (settingsWriteInProgress) {
-            toast("设置正在保存")
+            toast(getString(R.string.main_settings_saving))
             return false
         }
         settingsWriteInProgress = true
@@ -623,20 +753,20 @@ class MainActivity : Activity() {
         val runtime = try {
             readRuntimeSettings()
         } catch (error: IllegalArgumentException) {
-            testResult.text = "失败：${error.message}"
+            testResult.text = getString(R.string.main_test_failed, error.message)
             return
         }
         testButton.isEnabled = false
-        testResult.text = "正在执行真实转写请求…"
+        testResult.text = getString(R.string.main_test_running)
         val accepted = app.voiceJobController.testConnection(runtime) { result ->
             testButton.isEnabled = true
             testResult.text = buildString {
-                append(if (result.success) "成功" else "失败")
-                result.statusCode?.let { append("\nHTTP：$it") }
-                result.elapsedMillis?.let { append("\n耗时：$it ms") }
-                if (result.text.isNotBlank()) append("\ntext：${result.text}")
-                if (result.message.isNotBlank()) append("\n结果：${result.message}")
-                if (result.serverSummary.isNotBlank()) append("\n服务端摘要：${result.serverSummary}")
+                append(if (result.success) getString(R.string.main_success) else getString(R.string.main_failure))
+                result.statusCode?.let { append("\n" + getString(R.string.main_test_http, it)) }
+                result.elapsedMillis?.let { append("\n" + getString(R.string.main_test_elapsed, it)) }
+                if (result.text.isNotBlank()) append("\n" + getString(R.string.main_test_text, result.text))
+                if (result.message.isNotBlank()) append("\n" + getString(R.string.main_test_result, result.message))
+                if (result.serverSummary.isNotBlank()) append("\n" + getString(R.string.main_test_summary, result.serverSummary))
             }
         }
         if (!accepted) testButton.isEnabled = true
@@ -673,30 +803,66 @@ class MainActivity : Activity() {
 
     private fun refreshPermissionStatus() {
         accessibilityStatus.text = if (AccessibilityStatus.isEnabled(this)) {
-            "无障碍服务：已启用"
+            getString(R.string.main_accessibility_enabled)
         } else {
-            "无障碍服务：未启用。启用后才会显示悬浮按钮。"
+            getString(R.string.main_accessibility_disabled)
         }
         microphoneStatus.text = if (
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         ) {
-            "麦克风权限：已授予"
+            getString(R.string.main_microphone_granted_status)
         } else {
-            "麦克风权限：未授予"
+            getString(R.string.main_microphone_denied_status)
+        }
+        refreshNotificationStatus()
+    }
+
+    private fun refreshNotificationStatus() {
+        val manager = getSystemService(NotificationManager::class.java)
+        val channel = manager.getNotificationChannel(RecordingService.CHANNEL_ID)
+        notificationsEnabled.isChecked = manager.areNotificationsEnabled() &&
+            channel?.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
+    private fun openNotificationSettings() {
+        val manager = getSystemService(NotificationManager::class.java)
+        val channelBlocked = manager.areNotificationsEnabled() &&
+            manager.getNotificationChannel(RecordingService.CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE
+        val intent = Intent(
+            if (channelBlocked) Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS else Settings.ACTION_APP_NOTIFICATION_SETTINGS,
+        ).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (channelBlocked) intent.putExtra(Settings.EXTRA_CHANNEL_ID, RecordingService.CHANNEL_ID)
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            try {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            } catch (_: ActivityNotFoundException) {
+                toast(getString(R.string.main_notifications_unavailable))
+            }
         }
     }
 
     private fun requestMicrophonePermissions() {
-        val permissions = buildList {
-            add(Manifest.permission.RECORD_AUDIO)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (permissions.isEmpty()) {
-            toast("麦克风权限已授予")
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            toast(getString(R.string.main_microphone_granted))
         } else {
-            requestPermissions(permissions.toTypedArray(), REQUEST_MICROPHONE)
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MICROPHONE)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun beginIconImport(editorId: String) {
+        pendingIconEditorId = editorId
+        try {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/svg+xml", "image/png", "image/jpeg"))
+            }, REQUEST_ICON)
+        } catch (error: Exception) {
+            pendingIconEditorId = null
+            toast(getString(R.string.main_icon_picker_failed, error.message ?: getString(R.string.main_file_manager_unavailable)))
         }
     }
 
@@ -729,10 +895,10 @@ class MainActivity : Activity() {
         try {
             contentResolver.openOutputStream(uri, "w")?.bufferedWriter()?.use { writer ->
                 writer.write(settingsRepository.exportJson())
-            } ?: throw IOException("无法打开导出文件")
-            toast("配置已导出；文件不包含 API Key")
+            } ?: throw IOException(getString(R.string.main_export_open_failed))
+            toast(getString(R.string.main_exported))
         } catch (error: Exception) {
-            toast("导出失败：${error.message ?: error.javaClass.simpleName}")
+            toast(getString(R.string.main_export_failed, error.message ?: error.javaClass.simpleName))
         }
     }
 
@@ -740,22 +906,22 @@ class MainActivity : Activity() {
         try {
             val json = contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
                 val content = reader.readText()
-                if (content.length > MAX_IMPORT_CHARS) throw IllegalArgumentException("导入文件过大")
+                if (content.length > MAX_IMPORT_CHARS) throw IllegalArgumentException(getString(R.string.main_import_too_large))
                 content
-            } ?: throw IOException("无法读取导入文件")
+            } ?: throw IOException(getString(R.string.main_import_read_failed))
             val preview = settingsRepository.previewImport(json)
-            if (preview.apiKey != null) {
+            if (preview.hasApiKeys) {
                 AlertDialog.Builder(this)
-                    .setTitle("导入 API Key？")
-                    .setMessage("此配置文件包含 API Key。确认后，密钥会写入 Android Keystore 支持的安全存储。")
-                    .setPositiveButton("确认导入") { _, _ -> applyImport(preview, true) }
-                    .setNegativeButton("取消", null)
+                    .setTitle(getString(R.string.main_import_keys_title))
+                    .setMessage(getString(R.string.main_import_keys_message))
+                    .setPositiveButton(getString(R.string.main_import_confirm)) { _, _ -> applyImport(preview, true) }
+                    .setNegativeButton(getString(R.string.main_cancel), null)
                     .show()
             } else {
                 applyImport(preview, false)
             }
         } catch (error: Exception) {
-            toast("导入失败：${error.message ?: error.javaClass.simpleName}")
+            toast(getString(R.string.main_import_failed, error.message ?: error.javaClass.simpleName))
         }
     }
 
@@ -764,11 +930,13 @@ class MainActivity : Activity() {
             operation = { settingsRepository.applyImport(preview, allowApiKey) },
             onSuccess = {
                 loadSettingsIntoForm()
+                app.voiceJobController.refreshLanguage()
                 refreshOverlayAppearance()
-                toast("配置已导入")
+                toast(AppStrings.get(R.string.main_imported, "Settings imported"))
+                recreateForLanguageChange()
             },
             onFailure = { error ->
-                toast("导入失败：${error.message ?: error.javaClass.simpleName}")
+                toast(getString(R.string.main_import_failed, error.message ?: error.javaClass.simpleName))
             },
         )
     }
@@ -789,7 +957,7 @@ class MainActivity : Activity() {
 
     private fun colorPreviewItem(label: String): Pair<View, LinearLayout> {
         val swatch = View(this).apply {
-            contentDescription = "${label}颜色预览"
+            contentDescription = getString(R.string.main_color_preview, label)
         }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -870,7 +1038,7 @@ class MainActivity : Activity() {
         content.addView(valueRow)
 
         content.addView(TextView(this).apply {
-            text = "亮度"
+            text = getString(R.string.main_brightness)
             setPadding(0, dp(14), 0, 0)
         })
         val brightness = SeekBar(this).apply { max = 100 }
@@ -897,8 +1065,8 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle(label)
             .setView(content)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("确定") { _, _ -> onColorSelected(picker.color) }
+            .setNegativeButton(getString(R.string.main_cancel), null)
+            .setPositiveButton(getString(R.string.main_ok)) { _, _ -> onColorSelected(picker.color) }
             .show()
     }
 
@@ -924,7 +1092,7 @@ class MainActivity : Activity() {
 
     private fun updateColorEditor(editor: ColorEditor, color: Int) {
         editor.value.text = colorToHex(color)
-        editor.row.contentDescription = "编辑${editor.label}，当前为 ${colorToHex(color)}"
+        editor.row.contentDescription = getString(R.string.main_edit_color, editor.label, colorToHex(color))
         setColorSwatch(editor.swatch, color)
     }
 
@@ -964,11 +1132,11 @@ class MainActivity : Activity() {
             DisplayConfig.MIN_BUTTON_OPACITY) * 100f).roundToInt()
 
     private fun colorSchemeLabel(scheme: OverlayColorScheme): String = when (scheme) {
-        OverlayColorScheme.DEFAULT -> "默认（当前配色）"
-        OverlayColorScheme.OCEAN -> "海洋"
-        OverlayColorScheme.SUNSET -> "日落"
-        OverlayColorScheme.COLOR_BLIND -> "色盲友好"
-        OverlayColorScheme.CUSTOM -> "Custom"
+        OverlayColorScheme.DEFAULT -> getString(R.string.main_scheme_default)
+        OverlayColorScheme.OCEAN -> getString(R.string.main_scheme_ocean)
+        OverlayColorScheme.SUNSET -> getString(R.string.main_scheme_sunset)
+        OverlayColorScheme.COLOR_BLIND -> getString(R.string.main_scheme_color_blind)
+        OverlayColorScheme.CUSTOM -> getString(R.string.main_scheme_custom)
     }
 
     private fun colorToHex(color: Int): String = String.format(Locale.ROOT, "#%06X", color)
@@ -1046,7 +1214,7 @@ class MainActivity : Activity() {
     }
 
     private fun formatSampleRate(value: Int): String = when (value) {
-        AudioConfig.AUTO_SAMPLE_RATE -> "跟随录音输入（最高 48 kHz）"
+        AudioConfig.AUTO_SAMPLE_RATE -> getString(R.string.main_sample_rate_auto)
         44_100 -> "44.1 kHz"
         else -> "${value / 1_000} kHz"
     }
@@ -1073,7 +1241,10 @@ class MainActivity : Activity() {
         private const val REQUEST_MICROPHONE = 100
         private const val REQUEST_EXPORT = 101
         private const val REQUEST_IMPORT = 102
-        private const val MAX_IMPORT_CHARS = 1_000_000
+        private const val REQUEST_ICON = 103
+        private const val STATE_ICON_EDITOR_ID = "pending_icon_editor_id"
+        private const val STATE_PROMPT_EDITOR = "prompt_editor_draft"
+        private const val MAX_IMPORT_CHARS = 16 * 1_024 * 1_024
         private const val BUTTON_SCALE_PROGRESS_MAX = 150
         private const val BUTTON_OPACITY_PROGRESS_MAX = 70
         private const val COLOR_PICKER_SIZE_DP = 240

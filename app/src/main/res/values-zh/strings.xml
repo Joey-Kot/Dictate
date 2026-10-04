@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_name">Dictate 语音转写</string>
+    <string name="accessibility_service_description">显示不抢焦点的语音悬浮按钮，读取选中文本进行后处理，并将结果写入当前编辑位置。</string>
+</resources>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_input_sample_rate">Частота дискретизации входного сигнала должна быть положительной</string>
+    <string name="settings_sample_rate_unsupported">Неподдерживаемая частота дискретизации</string>
+    <string name="settings_max_retries">Максимальное число повторов должно быть от 0 до 10</string>
+    <string name="settings_initial_backoff">Начальная задержка должна быть от 0,1 до 60 секунд</string>
+    <string name="settings_long_press">Длительность долгого нажатия должна быть от 300 до 5000 мс</string>
+    <string name="settings_double_tap">Интервал двойного нажатия должен быть от 150 до 1000 мс</string>
+    <string name="settings_recording_color">Цвет записи должен быть в формате #RRGGBB</string>
+    <string name="settings_paused_color">Цвет паузы должен быть в формате #RRGGBB</string>
+    <string name="settings_processing_color">Цвет обработки должен быть в формате #RRGGBB</string>
+    <string name="settings_write_thread">Нельзя сохранять настройки в основном потоке</string>
+    <string name="settings_write_failed">Не удалось сохранить настройки</string>
+    <string name="settings_prompt_save_failed">Не удалось сохранить инструкции</string>
+    <string name="settings_base_url_invalid">Неверный базовый URL</string>
+    <string name="settings_additional_invalid">Неверные дополнительные параметры</string>
+    <string name="settings_post_base_url">Базовый URL постобработки должен быть допустимым адресом HTTP или HTTPS</string>
+    <string name="settings_import_json">Импортируемый файл не является допустимым объектом JSON</string>
+    <string name="settings_schema_version">Неподдерживаемая версия настроек schemaVersion</string>
+    <string name="settings_channels">audioOutput.channels должен равняться 1</string>
+    <string name="settings_codec_invalid">Неверное значение audioOutput.codec</string>
+    <string name="settings_container_invalid">Неверное значение audioOutput.container</string>
+    <string name="settings_language_unsupported">Неподдерживаемый язык интерфейса</string>
+    <string name="settings_import_api_key">Импортируемый файл содержит ключи API и требует явного подтверждения</string>
+    <string name="settings_color_scheme_invalid">Неверное значение display.colorScheme</string>
+    <string name="settings_bit_depth">Битовая глубина должна быть одной из следующих: %1$s бит</string>
+    <string name="settings_codec_bitrate">Кодек %1$s не поддерживает этот битрейт при выбранной частоте дискретизации</string>
+    <string name="settings_codec_container">Кодек %1$s не может использовать контейнер %2$s</string>
+    <string name="settings_button_scale">Размер кнопки должен быть от %1$s до %2$s</string>
+    <string name="settings_button_opacity">Непрозрачность кнопки должна быть от %1$s до %2$s</string>
+    <string name="settings_field_object">%1$s должен быть объектом JSON</string>
+    <string name="settings_field_string">%1$s должен быть строкой</string>
+    <string name="settings_field_boolean">%1$s должен быть логическим значением</string>
+    <string name="settings_field_integer">%1$s должен быть целым числом</string>
+    <string name="settings_field_finite">%1$s должен быть конечным числом</string>
+    <string name="settings_field_number">%1$s должен быть числом</string>
+    <string name="settings_field_rgb">%1$s должен быть в формате #RRGGBB</string>
+    <string name="settings_field_missing">Отсутствует поле %1$s</string>
+    <string name="settings_field_null">%1$s не может быть null</string>
+</resources>

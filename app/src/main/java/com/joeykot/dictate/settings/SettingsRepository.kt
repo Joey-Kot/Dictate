@@ -1,8 +1,12 @@
 package com.joeykot.dictate.settings
 
+import com.joeykot.dictate.R
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Looper
+import com.joeykot.dictate.i18n.AppLocale
+import com.joeykot.dictate.i18n.AppStrings
+import com.joeykot.dictate.model.AppLanguage
 import com.joeykot.dictate.model.AppSettings
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
@@ -11,18 +15,26 @@ import com.joeykot.dictate.model.DisplayConfig
 import com.joeykot.dictate.model.InteractionConfig
 import com.joeykot.dictate.model.OverlayColorScheme
 import com.joeykot.dictate.model.OverlayPalette
+import com.joeykot.dictate.model.PostProcessingConfig
+import com.joeykot.dictate.model.PostProcessingProvider
+import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.model.ProviderConfig
 import com.joeykot.dictate.model.RetryConfig
 import com.joeykot.dictate.model.RuntimeSettings
 import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
 import org.json.JSONException
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.net.URI
 import java.util.Locale
 
 class SettingsRepository(context: Context) {
+    private val applicationContext = context.applicationContext
     private val preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val secureApiKeyStore = SecureApiKeyStore(context, preferences)
+    private val iconDirectory = File(context.filesDir, "icons")
 
     @Synchronized
     fun get(): AppSettings {
@@ -47,6 +59,7 @@ class SettingsRepository(context: Context) {
             storedSampleRate
         }
         return AppSettings(
+            language = AppLocale.readLanguage(applicationContext),
             audio = AudioConfig(
                 bitDepth = preferences.getInt(KEY_BIT_DEPTH, AudioConfig.DEFAULT_BIT_DEPTH),
                 sampleRate = sampleRate,
@@ -101,24 +114,46 @@ class SettingsRepository(context: Context) {
                     ),
                 ),
             ).normalized(),
+            postProcessing = PostProcessingConfig(
+                provider = enumValueOrDefault(
+                    preferences.getString(KEY_POST_PROVIDER, null),
+                    PostProcessingProvider.OPENAI_COMPATIBLE,
+                ),
+                baseUrl = preferences.getString(KEY_POST_BASE_URL, "").orEmpty(),
+                model = preferences.getString(KEY_POST_MODEL, "").orEmpty(),
+                prompts = preferences.getString(KEY_PROMPTS, null)?.let { json ->
+                    runCatching { PostProcessingSettingsCodec.decodePrompts(JSONArray(json)) }
+                        .getOrDefault(emptyList())
+                } ?: emptyList(),
+            ),
         )
     }
 
     @Synchronized
-    fun runtime(): RuntimeSettings = RuntimeSettings(get(), secureApiKeyStore.get())
+    fun runtime(): RuntimeSettings = RuntimeSettings(
+        get(),
+        secureApiKeyStore.get(),
+        secureApiKeyStore.getPostProcessing(),
+    )
 
     @SuppressLint("ApplySharedPref")
     @Synchronized
-    fun save(settings: AppSettings, apiKey: String) {
-        check(Looper.myLooper() != Looper.getMainLooper()) { "设置写入不能在主线程执行" }
+    fun save(
+        settings: AppSettings,
+        apiKey: String,
+        postProcessingApiKey: String = secureApiKeyStore.getPostProcessing(),
+    ) {
+        check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
         val errors = validate(settings)
         require(errors.isEmpty()) { errors.joinToString("；") }
+        val previousIconNames = storedIconNames()
 
         val normalized = settings.copy(
             audio = settings.audio.normalized(),
             display = settings.display.normalized(),
         )
         val editor = preferences.edit()
+            .putString(AppLocale.LANGUAGE_KEY, normalized.language.tag)
             .putInt(KEY_BIT_DEPTH, normalized.audio.bitDepth)
             .putInt(KEY_SAMPLE_RATE, normalized.audio.sampleRate)
             .putBoolean(KEY_SAMPLE_RATE_SELECTION_IS_CURRENT, true)
@@ -128,6 +163,10 @@ class SettingsRepository(context: Context) {
             .putString(KEY_BASE_URL, normalized.provider.baseUrl.trim())
             .putString(KEY_MODEL, normalized.provider.model.trim())
             .putString(KEY_ADDITIONAL_JSON, normalized.provider.additionalJson.trim())
+            .putString(KEY_POST_PROVIDER, normalized.postProcessing.provider.name)
+            .putString(KEY_POST_BASE_URL, normalized.postProcessing.baseUrl.trim())
+            .putString(KEY_POST_MODEL, normalized.postProcessing.model.trim())
+            .putString(KEY_PROMPTS, PostProcessingSettingsCodec.encodePrompts(normalized.postProcessing.prompts).toString())
             .putBoolean(KEY_RETRY_ENABLED, normalized.retry.enabled)
             .putInt(KEY_MAX_RETRIES, normalized.retry.maxRetries)
             .putLong(
@@ -144,9 +183,36 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_CUSTOM_PAUSED_COLOR, normalized.display.customPalette.pausedColor)
             .putInt(KEY_CUSTOM_PROCESSING_COLOR, normalized.display.customPalette.processingColor)
         secureApiKeyStore.stage(editor, apiKey.trim())
-        // The settings and encrypted API Key must become durable as one transaction.
-        check(editor.commit()) { "设置写入失败" }
+        secureApiKeyStore.stagePostProcessing(editor, postProcessingApiKey.trim())
+        // The settings and both encrypted API Keys become durable as one transaction.
+        check(editor.commit()) { AppStrings.get(R.string.settings_write_failed, "Failed to save settings") }
+        AppStrings.refresh(applicationContext)
         secureApiKeyStore.clearLegacyValue()
+        removeReplacedIcons(previousIconNames, normalized.postProcessing.prompts)
+    }
+
+    /** Prompt editing is independent of unsaved or incomplete public provider configuration. */
+    @SuppressLint("ApplySharedPref")
+    @Synchronized
+    fun savePrompts(prompts: List<PromptConfig>) {
+        check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
+        val errors = PostProcessingSettingsCodec.validatePrompts(prompts)
+        require(errors.isEmpty()) { errors.joinToString("；") }
+        val previousIconNames = storedIconNames()
+        check(preferences.edit()
+            .putString(KEY_PROMPTS, PostProcessingSettingsCodec.encodePrompts(prompts).toString())
+            .commit()) { AppStrings.get(R.string.settings_prompt_save_failed, "Failed to save prompts") }
+        removeReplacedIcons(previousIconNames, prompts)
+    }
+
+    private fun storedIconNames(): Set<String> = runCatching {
+        PostProcessingSettingsCodec.decodePrompts(JSONArray(preferences.getString(KEY_PROMPTS, "[]")))
+            .mapNotNull { it.customIcon }.filter(PromptIconAssets::isSafeFileName).toSet()
+    }.getOrDefault(emptySet())
+
+    private fun removeReplacedIcons(previous: Set<String>, prompts: List<PromptConfig>) {
+        val current = prompts.mapNotNull { it.customIcon }.toSet()
+        (previous - current).forEach { name -> runCatching { File(iconDirectory, name).delete() } }
     }
 
     fun validate(settings: AppSettings): List<String> = buildList {
@@ -158,20 +224,30 @@ class SettingsRepository(context: Context) {
             try {
                 BaseUrl.transcriptionEndpoint(settings.provider.baseUrl)
             } catch (error: IllegalArgumentException) {
-                add(error.message ?: "Base URL 无效")
+                add(error.message ?: AppStrings.get(R.string.settings_base_url_invalid, "Invalid Base URL"))
             }
         }
         try {
-            AdditionalParameters.parse(settings.provider.additionalJson)
+            AdditionalParameters.parseObject(settings.provider.additionalJson)
         } catch (error: IllegalArgumentException) {
-            add(error.message ?: "附加参数无效")
+            add(error.message ?: AppStrings.get(R.string.settings_additional_invalid, "Invalid additional parameters"))
         }
+        if (settings.postProcessing.baseUrl.isNotBlank()) {
+            val uri = runCatching { URI(settings.postProcessing.baseUrl.trim()) }.getOrNull()
+            if (uri == null || uri.scheme !in listOf("https", "http") || uri.host.isNullOrBlank() ||
+                uri.rawUserInfo != null || uri.rawFragment != null
+            ) {
+                add(AppStrings.get(R.string.settings_post_base_url, "The post-processing Base URL must be a valid HTTP or HTTPS address"))
+            }
+        }
+        addAll(PostProcessingSettingsCodec.validatePrompts(settings.postProcessing.prompts))
     }
 
     fun exportJson(): String {
         val settings = get()
         val root = JSONObject()
-        root.put("schemaVersion", 3)
+        root.put("schemaVersion", 4)
+        root.put("language", settings.language.tag)
         root.put(
             "audioOutput",
             JSONObject()
@@ -201,6 +277,11 @@ class SettingsRepository(context: Context) {
                 .put("maxRetries", settings.retry.maxRetries)
                 .put("initialBackoffSeconds", settings.retry.initialBackoffSeconds),
         )
+        root.put("postProcessing", PostProcessingSettingsCodec.encode(settings.postProcessing))
+        root.put("promptIconAssets", PromptIconAssets.encode(
+            iconDirectory,
+            settings.postProcessing.prompts.mapNotNull { it.customIcon }.toSet(),
+        ))
         root.put(
             "interaction",
             JSONObject()
@@ -229,11 +310,11 @@ class SettingsRepository(context: Context) {
         val root = try {
             JSONObject(json)
         } catch (_: JSONException) {
-            throw IllegalArgumentException("导入文件不是有效的 JSON 对象")
+            throw IllegalArgumentException(AppStrings.get(R.string.settings_import_json, "The imported file is not a valid JSON object"))
         }
         val schemaVersion = requiredInt(root, "schemaVersion", "schemaVersion")
         if (schemaVersion !in SUPPORTED_SCHEMA_VERSIONS) {
-            throw IllegalArgumentException("不支持的配置 schemaVersion")
+            throw IllegalArgumentException(AppStrings.get(R.string.settings_schema_version, "Unsupported configuration schemaVersion"))
         }
 
         val audioObject = requiredObject(root, "audioOutput", "audioOutput")
@@ -247,15 +328,15 @@ class SettingsRepository(context: Context) {
         }
 
         if (requiredInt(audioObject, "channels", "audioOutput.channels") != 1) {
-            throw IllegalArgumentException("audioOutput.channels 只能为 1")
+            throw IllegalArgumentException(AppStrings.get(R.string.settings_channels, "audioOutput.channels must be 1"))
         }
 
         val codecName = requiredString(audioObject, "codec", "audioOutput.codec")
         val codec = AudioCodec.entries.find { it.value == codecName }
-            ?: throw IllegalArgumentException("audioOutput.codec 无效")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_codec_invalid, "Invalid audioOutput.codec"))
         val containerName = requiredString(audioObject, "container", "audioOutput.container")
         val container = AudioContainer.entries.find { it.value == containerName }
-            ?: throw IllegalArgumentException("audioOutput.container 无效")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_container_invalid, "Invalid audioOutput.container"))
 
         val additionalObject = requiredObject(
             providerObject,
@@ -269,8 +350,35 @@ class SettingsRepository(context: Context) {
         } else {
             null
         }
+        val postProcessingObject = if (schemaVersion >= 4) {
+            requiredObject(root, "postProcessing", "postProcessing")
+        } else {
+            null
+        }
+        val postProcessing = postProcessingObject?.let(PostProcessingSettingsCodec::decode)
+            ?: PostProcessingConfig()
+        val importedPostProcessingApiKey = if (postProcessingObject?.has("apiKey") == true) {
+            requiredString(postProcessingObject, "apiKey", "postProcessing.apiKey")
+        } else {
+            null
+        }
+        val iconAssetsObject = if (schemaVersion >= 4 && root.has("promptIconAssets")) {
+            requiredObject(root, "promptIconAssets", "promptIconAssets")
+        } else {
+            null
+        }
+        val iconAssets = PromptIconAssets.decode(
+            iconAssetsObject,
+            postProcessing.prompts.mapNotNull { it.customIcon }.toSet(),
+        )
 
         val imported = AppSettings(
+            language = if (root.has("language")) {
+                AppLanguage.fromTag(requiredString(root, "language", "language"))
+                    ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_language_unsupported, "Unsupported interface language"))
+            } else {
+                AppLanguage.ENGLISH
+            },
             audio = AudioConfig(
                 bitDepth = requiredInt(audioObject, "bitDepth", "audioOutput.bitDepth"),
                 sampleRate = requiredInt(audioObject, "sampleRate", "audioOutput.sampleRate"),
@@ -303,19 +411,40 @@ class SettingsRepository(context: Context) {
                 ),
             ),
             display = display,
+            postProcessing = postProcessing,
         )
 
         val errors = validate(imported)
         if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("；"))
 
-        return ImportPreview(imported, importedApiKey)
+        return ImportPreview(imported, importedApiKey, importedPostProcessingApiKey, iconAssets)
     }
 
+    @Synchronized
     fun applyImport(preview: ImportPreview, allowApiKey: Boolean) {
-        if (preview.apiKey != null && !allowApiKey) {
-            throw IllegalArgumentException("导入文件包含 API Key，需要明确确认")
+        check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
+        if (preview.hasApiKeys && !allowApiKey) {
+            throw IllegalArgumentException(AppStrings.get(R.string.settings_import_api_key, "The imported file contains API keys and requires explicit confirmation"))
         }
-        save(preview.settings, preview.apiKey ?: secureApiKeyStore.get())
+        val errors = validate(preview.settings)
+        require(errors.isEmpty()) { errors.joinToString("；") }
+        val installedIcons = PromptIconAssets.write(iconDirectory, preview.iconAssets)
+        val importedSettings = preview.settings.copy(postProcessing = preview.settings.postProcessing.copy(
+            prompts = preview.settings.postProcessing.prompts.map { prompt ->
+                // Do not bind an imported prompt to an unrelated existing file with the same name.
+                prompt.copy(customIcon = prompt.customIcon?.let(installedIcons::get))
+            },
+        ))
+        try {
+            save(
+                importedSettings,
+                preview.apiKey ?: secureApiKeyStore.get(),
+                preview.postProcessingApiKey ?: secureApiKeyStore.getPostProcessing(),
+            )
+        } catch (error: Exception) {
+            installedIcons.values.forEach { File(iconDirectory, it).delete() }
+            throw error
+        }
     }
 
     @Synchronized
@@ -337,15 +466,15 @@ class SettingsRepository(context: Context) {
 
     private fun requiredObject(parent: JSONObject, key: String, path: String): JSONObject =
         requiredValue(parent, key, path) as? JSONObject
-            ?: throw IllegalArgumentException("$path 必须是 JSON 对象")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_field_object, "%1\$s must be a JSON object", path))
 
     private fun requiredString(parent: JSONObject, key: String, path: String): String =
         requiredValue(parent, key, path) as? String
-            ?: throw IllegalArgumentException("$path 必须是字符串")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_field_string, "%1\$s must be a string", path))
 
     private fun requiredBoolean(parent: JSONObject, key: String, path: String): Boolean =
         requiredValue(parent, key, path) as? Boolean
-            ?: throw IllegalArgumentException("$path 必须是布尔值")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_field_boolean, "%1\$s must be a boolean", path))
 
     private fun optionalBoolean(
         parent: JSONObject,
@@ -358,7 +487,7 @@ class SettingsRepository(context: Context) {
         val number = requiredNumber(parent, key, path)
         val value = number.toDouble()
         if (!value.isFinite() || value % 1.0 != 0.0 || value !in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()) {
-            throw IllegalArgumentException("$path 必须是整数")
+            throw IllegalArgumentException(AppStrings.get(R.string.settings_field_integer, "%1\$s must be an integer", path))
         }
         return value.toInt()
     }
@@ -369,25 +498,25 @@ class SettingsRepository(context: Context) {
         if (!value.isFinite() || value % 1.0 != 0.0 ||
             value < Long.MIN_VALUE.toDouble() || value > Long.MAX_VALUE.toDouble()
         ) {
-            throw IllegalArgumentException("$path 必须是整数")
+            throw IllegalArgumentException(AppStrings.get(R.string.settings_field_integer, "%1\$s must be an integer", path))
         }
         return value.toLong()
     }
 
     private fun requiredDouble(parent: JSONObject, key: String, path: String): Double {
         val value = requiredNumber(parent, key, path).toDouble()
-        if (!value.isFinite()) throw IllegalArgumentException("$path 必须是有限数字")
+        if (!value.isFinite()) throw IllegalArgumentException(AppStrings.get(R.string.settings_field_finite, "%1\$s must be a finite number", path))
         return value
     }
 
     private fun requiredNumber(parent: JSONObject, key: String, path: String): Number =
         requiredValue(parent, key, path) as? Number
-            ?: throw IllegalArgumentException("$path 必须是数字")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_field_number, "%1\$s must be a number", path))
 
     private fun parseDisplay(displayObject: JSONObject): DisplayConfig {
         val colorSchemeValue = requiredString(displayObject, "colorScheme", "display.colorScheme")
         val colorScheme = OverlayColorScheme.entries.find { it.value == colorSchemeValue }
-            ?: throw IllegalArgumentException("display.colorScheme 无效")
+            ?: throw IllegalArgumentException(AppStrings.get(R.string.settings_color_scheme_invalid, "Invalid display.colorScheme"))
         val customColors = requiredObject(displayObject, "customColors", "display.customColors")
         return DisplayConfig(
             buttonScale = requiredDouble(displayObject, "buttonScale", "display.buttonScale").toFloat(),
@@ -411,16 +540,16 @@ class SettingsRepository(context: Context) {
 
     private fun requiredRgbColor(parent: JSONObject, key: String, path: String): Int {
         val value = requiredString(parent, key, path)
-        if (!RGB_HEX.matches(value)) throw IllegalArgumentException("$path 必须是 #RRGGBB")
+        if (!RGB_HEX.matches(value)) throw IllegalArgumentException(AppStrings.get(R.string.settings_field_rgb, "%1\$s must use #RRGGBB", path))
         return value.substring(1).toInt(16)
     }
 
     private fun colorToHex(color: Int): String = String.format(Locale.ROOT, "#%06X", color)
 
     private fun requiredValue(parent: JSONObject, key: String, path: String): Any {
-        if (!parent.has(key)) throw IllegalArgumentException("缺少字段 $path")
+        if (!parent.has(key)) throw IllegalArgumentException(AppStrings.get(R.string.settings_field_missing, "Missing field %1\$s", path))
         val value = parent.get(key)
-        if (value == JSONObject.NULL) throw IllegalArgumentException("$path 不能为 null")
+        if (value == JSONObject.NULL) throw IllegalArgumentException(AppStrings.get(R.string.settings_field_null, "%1\$s cannot be null", path))
         return value
     }
 
@@ -430,7 +559,11 @@ class SettingsRepository(context: Context) {
     data class ImportPreview(
         val settings: AppSettings,
         val apiKey: String?,
-    )
+        val postProcessingApiKey: String? = null,
+        val iconAssets: Map<String, ByteArray> = emptyMap(),
+    ) {
+        val hasApiKeys: Boolean get() = apiKey != null || postProcessingApiKey != null
+    }
 
     data class OverlayPosition(
         val x: Int,
@@ -448,6 +581,10 @@ class SettingsRepository(context: Context) {
         const val KEY_BASE_URL = "provider.base_url"
         const val KEY_MODEL = "provider.model"
         const val KEY_ADDITIONAL_JSON = "provider.additional_json"
+        const val KEY_POST_PROVIDER = "post_processing.provider"
+        const val KEY_POST_BASE_URL = "post_processing.base_url"
+        const val KEY_POST_MODEL = "post_processing.model"
+        const val KEY_PROMPTS = "post_processing.prompts"
         const val KEY_RETRY_ENABLED = "retry.enabled"
         const val KEY_MAX_RETRIES = "retry.max_retries"
         const val KEY_INITIAL_BACKOFF = "retry.initial_backoff"
@@ -463,7 +600,7 @@ class SettingsRepository(context: Context) {
         const val KEY_OVERLAY_X = "overlay.x"
         const val KEY_OVERLAY_Y = "overlay.y"
         const val LEGACY_DEFAULT_SAMPLE_RATE = 16_000
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3)
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4)
         val RGB_HEX = Regex("#[0-9A-Fa-f]{6}")
     }
 }

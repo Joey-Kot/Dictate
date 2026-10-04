@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.view.MotionEvent
 import android.view.View
+import com.joeykot.dictate.R
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -71,7 +72,7 @@ class CircularColorPickerView(
             hsv,
         )
         isClickable = true
-        contentDescription = "圆形调色盘"
+        contentDescription = context.getString(R.string.main_color_picker)
     }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {

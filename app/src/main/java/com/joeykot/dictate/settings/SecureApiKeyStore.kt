@@ -54,6 +54,23 @@ class SecureApiKeyStore(
         }
     }
 
+    /** The post-processing key has no legacy fallback and never replaces the transcription key. */
+    fun getPostProcessing(): String {
+        val encoded = preferences.getString(KEY_POST_PROCESSING_VALUE, null) ?: return ""
+        return decryptOrClear(encoded) {
+            preferences.edit().remove(KEY_POST_PROCESSING_VALUE).apply()
+        }
+    }
+
+    fun stagePostProcessing(editor: SharedPreferences.Editor, value: String) {
+        val encoded = encrypt(value)
+        if (encoded == null) {
+            editor.remove(KEY_POST_PROCESSING_VALUE)
+        } else {
+            editor.putString(KEY_POST_PROCESSING_VALUE, encoded)
+        }
+    }
+
     fun clearLegacyValue() {
         if (legacyPreferences.contains(LEGACY_KEY_VALUE)) {
             legacyPreferences.edit().remove(LEGACY_KEY_VALUE).apply()
@@ -104,6 +121,7 @@ class SecureApiKeyStore(
 
     private companion object {
         const val KEY_VALUE = "secure.api_key_ciphertext"
+        const val KEY_POST_PROCESSING_VALUE = "secure.post_processing_api_key_ciphertext"
         const val KEY_MIGRATION_COMPLETE = "secure.api_key_migrated"
         const val LEGACY_PREFS_NAME = "secure_settings"
         const val LEGACY_KEY_VALUE = "api_key_ciphertext"

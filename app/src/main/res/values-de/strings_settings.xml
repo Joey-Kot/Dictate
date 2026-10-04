@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_input_sample_rate">Die Eingangsabtastrate muss positiv sein</string>
+    <string name="settings_sample_rate_unsupported">Nicht unterstützte Abtastrate</string>
+    <string name="settings_max_retries">Die maximale Anzahl der Wiederholungen muss zwischen 0 und 10 liegen</string>
+    <string name="settings_initial_backoff">Die anfängliche Wartezeit muss zwischen 0,1 und 60 Sekunden liegen</string>
+    <string name="settings_long_press">Die Dauer für langes Drücken muss zwischen 300 und 5000 ms liegen</string>
+    <string name="settings_double_tap">Das Doppeltippintervall muss zwischen 150 und 1000 ms liegen</string>
+    <string name="settings_recording_color">Die Aufnahmefarbe muss im Format #RRGGBB angegeben werden</string>
+    <string name="settings_paused_color">Die Pausenfarbe muss im Format #RRGGBB angegeben werden</string>
+    <string name="settings_processing_color">Die Verarbeitungsfarbe muss im Format #RRGGBB angegeben werden</string>
+    <string name="settings_write_thread">Einstellungen können nicht im Hauptthread geschrieben werden</string>
+    <string name="settings_write_failed">Einstellungen konnten nicht gespeichert werden</string>
+    <string name="settings_prompt_save_failed">Prompts konnten nicht gespeichert werden</string>
+    <string name="settings_base_url_invalid">Ungültige Basis-URL</string>
+    <string name="settings_additional_invalid">Ungültige zusätzliche Parameter</string>
+    <string name="settings_post_base_url">Die Basis-URL der Nachbearbeitung muss eine gültige HTTP- oder HTTPS-Adresse sein</string>
+    <string name="settings_import_json">Die importierte Datei ist kein gültiges JSON-Objekt</string>
+    <string name="settings_schema_version">Nicht unterstützte Konfigurationsversion schemaVersion</string>
+    <string name="settings_channels">audioOutput.channels muss 1 sein</string>
+    <string name="settings_codec_invalid">Ungültiger Wert für audioOutput.codec</string>
+    <string name="settings_container_invalid">Ungültiger Wert für audioOutput.container</string>
+    <string name="settings_language_unsupported">Nicht unterstützte Oberflächensprache</string>
+    <string name="settings_import_api_key">Die importierte Datei enthält API-Schlüssel und erfordert eine ausdrückliche Bestätigung</string>
+    <string name="settings_color_scheme_invalid">Ungültiger Wert für display.colorScheme</string>
+    <string name="settings_bit_depth">Die Bittiefe muss einem der folgenden Werte entsprechen: %1$s Bit</string>
+    <string name="settings_codec_bitrate">Der Codec %1$s unterstützt diese Bitrate bei der gewählten Abtastrate nicht</string>
+    <string name="settings_codec_container">Der Codec %1$s kann den Container %2$s nicht verwenden</string>
+    <string name="settings_button_scale">Die Schaltflächengröße muss zwischen %1$s und %2$s liegen</string>
+    <string name="settings_button_opacity">Die Deckkraft der Schaltfläche muss zwischen %1$s und %2$s liegen</string>
+    <string name="settings_field_object">%1$s muss ein JSON-Objekt sein</string>
+    <string name="settings_field_string">%1$s muss eine Zeichenfolge sein</string>
+    <string name="settings_field_boolean">%1$s muss ein boolescher Wert sein</string>
+    <string name="settings_field_integer">%1$s muss eine ganze Zahl sein</string>
+    <string name="settings_field_finite">%1$s muss eine endliche Zahl sein</string>
+    <string name="settings_field_number">%1$s muss eine Zahl sein</string>
+    <string name="settings_field_rgb">%1$s muss im Format #RRGGBB angegeben werden</string>
+    <string name="settings_field_missing">Feld %1$s fehlt</string>
+    <string name="settings_field_null">%1$s darf nicht null sein</string>
+</resources>

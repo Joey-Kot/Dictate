@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_name">Dictate 音声文字起こし</string>
+    <string name="accessibility_service_description">フォーカスを奪わずに音声ボタンを表示し、選択したテキストを読み取って処理し、結果を現在の入力欄に挿入します。</string>
+</resources>

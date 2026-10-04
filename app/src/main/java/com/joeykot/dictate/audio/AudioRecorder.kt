@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.model.Pcm16Format
 import java.io.BufferedOutputStream
 import java.io.File
@@ -56,7 +58,7 @@ class AudioRecorder(
 
         val initialized = createStartedAudioRecord()
         if (initialized == null) {
-            finishFailure("无法初始化或启动麦克风录音", null)
+            finishFailure(AppStrings.get(R.string.runtime_microphone_start_failed, "Unable to initialize or start microphone recording"), null)
             return
         }
 
@@ -80,7 +82,7 @@ class AudioRecorder(
             audioRecord?.stop()
             true
         } catch (error: Exception) {
-            finishFailure("暂停录音失败：${error.message ?: error.javaClass.simpleName}", error)
+            finishFailure(AppStrings.get(R.string.runtime_recorder_pause_failed, "Failed to pause recording: %1\$s", error.message ?: error.javaClass.simpleName), error)
             false
         }
     }
@@ -91,13 +93,13 @@ class AudioRecorder(
             return try {
                 audioRecord?.startRecording()
                 if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                    throw IllegalStateException("AudioRecord 未恢复录制状态")
+                    throw IllegalStateException(AppStrings.get(R.string.runtime_recorder_not_resumed, "AudioRecord did not resume recording"))
                 }
                 paused = false
                 stateLock.notifyAll()
                 true
             } catch (error: Exception) {
-                finishFailure("恢复录音失败：${error.message ?: error.javaClass.simpleName}", error)
+                finishFailure(AppStrings.get(R.string.runtime_recorder_resume_failed, "Failed to resume recording: %1\$s", error.message ?: error.javaClass.simpleName), error)
                 false
             }
         }
@@ -147,10 +149,10 @@ class AudioRecorder(
                         callback.onAmplitude(calculateAmplitude(buffer, read))
                     } else if (running && !paused) {
                         val reason = when (read) {
-                            AudioRecord.ERROR_DEAD_OBJECT -> "麦克风被其他应用或系统占用"
-                            AudioRecord.ERROR_INVALID_OPERATION -> "录音设备进入无效状态"
-                            AudioRecord.ERROR_BAD_VALUE -> "录音缓冲参数无效"
-                            else -> "录音读取失败（$read）"
+                            AudioRecord.ERROR_DEAD_OBJECT -> AppStrings.get(R.string.runtime_microphone_busy, "The microphone is in use by another app or the system")
+                            AudioRecord.ERROR_INVALID_OPERATION -> AppStrings.get(R.string.runtime_recorder_invalid_state, "The recording device entered an invalid state")
+                            AudioRecord.ERROR_BAD_VALUE -> AppStrings.get(R.string.runtime_recorder_invalid_buffer, "Invalid recording buffer parameters")
+                            else -> AppStrings.get(R.string.runtime_recorder_read_failed, "Unable to read audio (%1\$d)", read)
                         }
                         throw IOException(reason)
                     }
@@ -160,9 +162,9 @@ class AudioRecorder(
             forcedFailureMessage?.let { finishFailure(it, null) } ?: finishSuccess()
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
-            finishFailure("录音任务被中断", error)
+            finishFailure(AppStrings.get(R.string.runtime_recording_interrupted, "Recording task interrupted"), error)
         } catch (error: Exception) {
-            finishFailure(error.message ?: "录音写入失败", error)
+            finishFailure(error.message ?: AppStrings.get(R.string.runtime_recording_write_failed, "Unable to write the recording"), error)
         }
     }
 

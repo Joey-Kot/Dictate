@@ -71,11 +71,11 @@ internal data class TextInsertionSnapshot(
     val offset: Int,
 ) {
     val absoluteSelectionStart: Int
-        get() = offset + selectionStart
+        get() = offset + minOf(selectionStart, selectionEnd)
 
     private val hasValidSelection: Boolean
         get() = selectionStart in 0..text.length &&
-            selectionEnd in selectionStart..text.length
+            selectionEnd in 0..text.length
 
     fun isValid(): Boolean = offset >= 0 && hasValidSelection
 }
@@ -134,5 +134,37 @@ internal fun editableTextForInsertion(
     nodeText: CharSequence?,
     isShowingHintText: Boolean,
 ): String = if (isShowingHintText) "" else nodeText?.toString().orEmpty()
+
+/** A range is selected even when it consists entirely of whitespace. */
+internal fun selectedTextInRange(
+    text: CharSequence?,
+    selectionStart: Int,
+    selectionEnd: Int,
+): String? {
+    val value = text?.toString() ?: return null
+    if (selectionStart !in 0..value.length || selectionEnd !in 0..value.length) return null
+    if (selectionStart == selectionEnd) return null
+    return value.substring(minOf(selectionStart, selectionEnd), maxOf(selectionStart, selectionEnd))
+}
+
+internal data class TextReplacement(val text: String, val cursor: Int)
+
+internal fun replaceCurrentSelection(
+    existing: String,
+    selectionStart: Int,
+    selectionEnd: Int,
+    insertedText: String,
+): TextReplacement? {
+    // Empty editors sometimes expose no selection until their first character is committed.
+    if (existing.isEmpty()) return TextReplacement(insertedText, insertedText.length)
+    // Do not guess an insertion location when the editor does not expose its cursor.
+    if (selectionStart !in 0..existing.length || selectionEnd !in 0..existing.length) return null
+    val start = minOf(selectionStart, selectionEnd)
+    val end = maxOf(selectionStart, selectionEnd)
+    return TextReplacement(
+        text = existing.substring(0, start) + insertedText + existing.substring(end),
+        cursor = start + insertedText.length,
+    )
+}
 
 private const val MAX_CONFIRMATION_SUFFIX_LENGTH = 256

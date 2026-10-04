@@ -172,7 +172,7 @@ class TextInsertionPolicyTest {
         val invalid = TextInsertionSnapshot(
             text = "hello",
             selectionStart = 5,
-            selectionEnd = 2,
+            selectionEnd = 6,
             offset = 0,
         )
 
@@ -180,6 +180,66 @@ class TextInsertionPolicyTest {
             TextInsertionObservation.UNAVAILABLE,
             observeTextInsertion(invalid, invalid, " world"),
         )
+    }
+
+    @Test
+    fun confirmsReplacementOfReversedSelection() {
+        val before = TextInsertionSnapshot("hello world!", 11, 6, 0)
+        val after = TextInsertionSnapshot("hello there!", 11, 11, 0)
+
+        assertEquals(
+            TextInsertionObservation.CONFIRMED,
+            observeTextInsertion(before, after, "there"),
+        )
+    }
+
+    @Test
+    fun replacesOnlySelectedRangeAndPlacesCursorAfterResult() {
+        assertEquals(
+            TextReplacement("before RESULT after", 13),
+            replaceCurrentSelection("before selected after", 7, 15, "RESULT"),
+        )
+        assertEquals(
+            TextReplacement("before RESULT after", 13),
+            replaceCurrentSelection("before selected after", 15, 7, "RESULT"),
+        )
+    }
+
+    @Test
+    fun insertsAtCollapsedCursorIncludingBothEnds() {
+        assertEquals(TextReplacement("Xabc", 1), replaceCurrentSelection("abc", 0, 0, "X"))
+        assertEquals(TextReplacement("aXbc", 2), replaceCurrentSelection("abc", 1, 1, "X"))
+        assertEquals(TextReplacement("abcX", 4), replaceCurrentSelection("abc", 3, 3, "X"))
+    }
+
+    @Test
+    fun preservesUnicodeAndMultilineTextOutsideSelection() {
+        assertEquals(
+            TextReplacement("前🙂替换\n后", 5),
+            replaceCurrentSelection("前🙂原文\n后", 3, 5, "替换"),
+        )
+    }
+
+    @Test
+    fun unknownSelectionInNonemptyEditorDoesNotGuessCursor() {
+        assertNull(replaceCurrentSelection("abc", -1, -1, "X"))
+        assertNull(replaceCurrentSelection("abc", 1, 4, "X"))
+        assertEquals(TextReplacement("X", 1), replaceCurrentSelection("", -1, -1, "X"))
+    }
+
+    @Test
+    fun selectedTextSupportsReadonlyReverseAndWhitespaceRanges() {
+        assertEquals("selected", selectedTextInRange("before selected after", 7, 15))
+        assertEquals("selected", selectedTextInRange("before selected after", 15, 7))
+        assertEquals(" \n ", selectedTextInRange("a \n b", 1, 4))
+    }
+
+    @Test
+    fun missingOrCollapsedOrInvalidRangeIsNotSelectedText() {
+        assertNull(selectedTextInRange("abc", 1, 1))
+        assertNull(selectedTextInRange("abc", -1, 1))
+        assertNull(selectedTextInRange("abc", 1, 4))
+        assertNull(selectedTextInRange(null, 0, 1))
     }
 
     @Test

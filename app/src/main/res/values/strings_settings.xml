@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_input_sample_rate">Input sample rate must be positive</string>
+    <string name="settings_sample_rate_unsupported">Unsupported sample rate</string>
+    <string name="settings_max_retries">Maximum retries must be between 0 and 10</string>
+    <string name="settings_initial_backoff">Initial backoff must be between 0.1 and 60 seconds</string>
+    <string name="settings_long_press">Long-press duration must be between 300 and 5000 ms</string>
+    <string name="settings_double_tap">Double-tap interval must be between 150 and 1000 ms</string>
+    <string name="settings_recording_color">Recording color must use #RRGGBB</string>
+    <string name="settings_paused_color">Paused color must use #RRGGBB</string>
+    <string name="settings_processing_color">Processing color must use #RRGGBB</string>
+    <string name="settings_write_thread">Settings cannot be written on the main thread</string>
+    <string name="settings_write_failed">Failed to save settings</string>
+    <string name="settings_prompt_save_failed">Failed to save prompts</string>
+    <string name="settings_base_url_invalid">Invalid Base URL</string>
+    <string name="settings_additional_invalid">Invalid additional parameters</string>
+    <string name="settings_post_base_url">The post-processing Base URL must be a valid HTTP or HTTPS address</string>
+    <string name="settings_import_json">The imported file is not a valid JSON object</string>
+    <string name="settings_schema_version">Unsupported configuration schemaVersion</string>
+    <string name="settings_channels">audioOutput.channels must be 1</string>
+    <string name="settings_codec_invalid">Invalid audioOutput.codec</string>
+    <string name="settings_container_invalid">Invalid audioOutput.container</string>
+    <string name="settings_language_unsupported">Unsupported interface language</string>
+    <string name="settings_import_api_key">The imported file contains API keys and requires explicit confirmation</string>
+    <string name="settings_color_scheme_invalid">Invalid display.colorScheme</string>
+    <string name="settings_bit_depth">Bit depth must be one of: %1$s bits</string>
+    <string name="settings_codec_bitrate">The %1$s codec does not support this bitrate at the selected sample rate</string>
+    <string name="settings_codec_container">The %1$s codec cannot use the %2$s container</string>
+    <string name="settings_button_scale">Button size must be between %1$s and %2$s</string>
+    <string name="settings_button_opacity">Button opacity must be between %1$s and %2$s</string>
+    <string name="settings_field_object">%1$s must be a JSON object</string>
+    <string name="settings_field_string">%1$s must be a string</string>
+    <string name="settings_field_boolean">%1$s must be a boolean</string>
+    <string name="settings_field_integer">%1$s must be an integer</string>
+    <string name="settings_field_finite">%1$s must be a finite number</string>
+    <string name="settings_field_number">%1$s must be a number</string>
+    <string name="settings_field_rgb">%1$s must use #RRGGBB</string>
+    <string name="settings_field_missing">Missing field %1$s</string>
+    <string name="settings_field_null">%1$s cannot be null</string>
+</resources>

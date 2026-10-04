@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_name">Dictate Spracherkennung</string>
+    <string name="accessibility_service_description">Zeigt eine schwebende Sprachtaste, ohne den Fokus zu übernehmen, liest ausgewählten Text zur Nachbearbeitung und fügt Ergebnisse in das aktuelle Eingabefeld ein.</string>
+</resources>

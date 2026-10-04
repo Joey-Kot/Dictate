@@ -1,6 +1,7 @@
 package com.joeykot.dictate
 
 import android.app.Application
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.job.VoiceJobController
 import com.joeykot.dictate.settings.SettingsRepository
 import com.joeykot.dictate.util.AudioFileStore
@@ -18,6 +19,7 @@ class DictateApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppStrings.refresh(this)
         settingsRepository = SettingsRepository(this)
         diagnostics = Diagnostics(this)
         audioFileStore = AudioFileStore(this).also { it.cleanupTemporaryFiles() }
@@ -29,4 +31,3 @@ class DictateApplication : Application() {
         )
     }
 }
-

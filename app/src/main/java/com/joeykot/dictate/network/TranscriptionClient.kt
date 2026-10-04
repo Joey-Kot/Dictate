@@ -1,5 +1,7 @@
 package com.joeykot.dictate.network
 
+import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.util.Diagnostics
 import org.json.JSONException
 import org.json.JSONObject
@@ -29,6 +31,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         val additionalFields: LinkedHashMap<String, String>,
         val audioFile: File,
         val mimeType: String,
+        val additionalJson: String? = null,
     )
 
     enum class FailureKind {
@@ -40,6 +43,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         WRITE_TIMEOUT,
         READ_TIMEOUT,
         HTTP,
+        SERVICE,
         INVALID_RESPONSE,
         IO,
     }
@@ -130,7 +134,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             if (writeTimedOut.get()) {
                 return failure(
                     FailureKind.WRITE_TIMEOUT,
-                    "上传音频超时",
+                    AppStrings.get(R.string.val_upload_timeout, "Audio upload timed out"),
                     true,
                     startedAt,
                     request.apiKey,
@@ -155,7 +159,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 )
                 Result.Failure(
                     kind = FailureKind.HTTP,
-                    message = "转写服务返回 HTTP $status",
+                    message = AppStrings.get(R.string.val_transcription_http, "The transcription service returned HTTP %1\$d", status),
                     retryable = retryable,
                     statusCode = status,
                     elapsedMillis = elapsed,
@@ -171,7 +175,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         } catch (error: InvalidResponseException) {
             failure(
                 FailureKind.INVALID_RESPONSE,
-                error.message ?: "响应缺少有效 text",
+                error.message ?: AppStrings.get(R.string.val_response_text_invalid, "The response has no valid text field"),
                 false,
                 startedAt,
                 request.apiKey,
@@ -179,7 +183,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         } catch (error: IllegalArgumentException) {
             failure(
                 FailureKind.CONFIGURATION,
-                error.message ?: "请求配置无效",
+                error.message ?: AppStrings.get(R.string.val_request_config_invalid, "Invalid request configuration"),
                 false,
                 startedAt,
                 request.apiKey,
@@ -192,17 +196,17 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             }
             failure(kind, timeoutMessage(kind), true, startedAt, request.apiKey)
         } catch (error: UnknownHostException) {
-            failure(FailureKind.DNS, "无法解析转写服务域名", true, startedAt, request.apiKey)
+            failure(FailureKind.DNS, AppStrings.get(R.string.val_transcription_dns, "Cannot resolve the transcription service hostname"), true, startedAt, request.apiKey)
         } catch (error: SSLException) {
-            failure(FailureKind.TLS, "TLS 连接失败：${safeMessage(error)}", true, startedAt, request.apiKey)
+            failure(FailureKind.TLS, AppStrings.get(R.string.val_tls_error, "TLS connection failed: %1\$s", safeMessage(error)), true, startedAt, request.apiKey)
         } catch (error: ConnectException) {
-            failure(FailureKind.CONNECTION, "无法连接转写服务", true, startedAt, request.apiKey)
+            failure(FailureKind.CONNECTION, AppStrings.get(R.string.val_transcription_connection, "Cannot connect to the transcription service"), true, startedAt, request.apiKey)
         } catch (error: NoRouteToHostException) {
-            failure(FailureKind.CONNECTION, "网络不可达", true, startedAt, request.apiKey)
+            failure(FailureKind.CONNECTION, AppStrings.get(R.string.val_network_unreachable, "Network unreachable"), true, startedAt, request.apiKey)
         } catch (error: FileNotFoundException) {
             failure(
                 FailureKind.CONFIGURATION,
-                "待上传音频在请求期间不可读取",
+                AppStrings.get(R.string.val_audio_unreadable, "The audio file became unreadable during the request"),
                 false,
                 startedAt,
                 request.apiKey,
@@ -211,11 +215,11 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             if (jobId in cancelledJobs) {
                 Result.Cancelled
             } else if (writeTimedOut.get()) {
-                failure(FailureKind.WRITE_TIMEOUT, "上传音频超时", true, startedAt, request.apiKey)
+                failure(FailureKind.WRITE_TIMEOUT, AppStrings.get(R.string.val_upload_timeout, "Audio upload timed out"), true, startedAt, request.apiKey)
             } else {
                 failure(
                     FailureKind.CONNECTION,
-                    "网络连接中断：${safeMessage(error)}",
+                    AppStrings.get(R.string.val_connection_interrupted, "Network connection interrupted: %1\$s", safeMessage(error)),
                     true,
                     startedAt,
                     request.apiKey,
@@ -227,7 +231,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             } else {
                 failure(
                     FailureKind.IO,
-                    "网络读写失败：${safeMessage(error)}",
+                    AppStrings.get(R.string.val_network_io, "Network I/O failed: %1\$s", safeMessage(error)),
                     true,
                     startedAt,
                     request.apiKey,
@@ -239,7 +243,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             } else {
                 failure(
                     FailureKind.IO,
-                    "请求失败：${safeMessage(error)}",
+                    AppStrings.get(R.string.val_request_error, "Request failed: %1\$s", safeMessage(error)),
                     false,
                     startedAt,
                     request.apiKey,
@@ -259,11 +263,11 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
 
     private fun validateRequest(request: Request) {
         require(request.endpoint.startsWith("https://") || request.endpoint.startsWith("http://")) {
-            "转写端点无效"
+            AppStrings.get(R.string.val_transcription_endpoint, "Invalid transcription endpoint")
         }
-        require(request.apiKey.isNotBlank()) { "API Key 不能为空" }
-        require(request.model.isNotBlank()) { "Model 不能为空" }
-        require(request.audioFile.isFile && request.audioFile.length() > 0L) { "待上传音频不存在或为空" }
+        require(request.apiKey.isNotBlank()) { AppStrings.get(R.string.val_api_key_empty, "API key cannot be empty") }
+        effectiveFields(request)
+        require(request.audioFile.isFile && request.audioFile.length() > 0L) { AppStrings.get(R.string.val_audio_missing, "The audio file to upload is missing or empty") }
     }
 
     private fun readResponseBody(connection: HttpURLConnection, status: Int): String {
@@ -289,12 +293,12 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         val root = try {
             JSONObject(body)
         } catch (_: JSONException) {
-            throw InvalidResponseException("响应不是有效的 JSON 对象")
+            throw InvalidResponseException(AppStrings.get(R.string.val_response_object, "The response is not a valid JSON object"))
         }
-        if (!root.has("text")) throw InvalidResponseException("响应缺少顶层 text 字段")
+        if (!root.has("text")) throw InvalidResponseException(AppStrings.get(R.string.val_response_text_missing, "The response is missing the top-level text field"))
         val value = root.get("text")
-        if (value !is String) throw InvalidResponseException("响应顶层 text 必须是字符串")
-        if (value.isBlank()) throw InvalidResponseException("响应顶层 text 不能为空")
+        if (value !is String) throw InvalidResponseException(AppStrings.get(R.string.val_response_text_type, "The top-level text field must be a string"))
+        if (value.isBlank()) throw InvalidResponseException(AppStrings.get(R.string.val_response_text_empty, "The top-level text field cannot be empty"))
         return value
     }
 
@@ -317,10 +321,10 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
     }
 
     private fun timeoutMessage(kind: FailureKind): String = when (kind) {
-        FailureKind.CONNECT_TIMEOUT -> "连接转写服务超时"
-        FailureKind.WRITE_TIMEOUT -> "上传音频超时"
-        FailureKind.READ_TIMEOUT -> "等待转写响应超时"
-        else -> "请求超时"
+        FailureKind.CONNECT_TIMEOUT -> AppStrings.get(R.string.val_transcription_connect_timeout, "Timed out connecting to the transcription service")
+        FailureKind.WRITE_TIMEOUT -> AppStrings.get(R.string.val_upload_timeout, "Audio upload timed out")
+        FailureKind.READ_TIMEOUT -> AppStrings.get(R.string.val_transcription_read_timeout, "Timed out waiting for the transcription response")
+        else -> AppStrings.get(R.string.val_request_timeout, "Request timed out")
     }
 
     private fun safeMessage(error: Throwable): String =
@@ -340,12 +344,10 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         val contentLength: Long
 
         init {
-            val fields = linkedMapOf("model" to request.model).apply {
-                putAll(request.additionalFields)
-            }
+            val fields = effectiveFields(request)
             fieldParts = fields.map { (name, value) ->
                 ("--$boundary\r\n" +
-                    "Content-Disposition: form-data; name=\"$name\"\r\n\r\n" +
+                    "Content-Disposition: form-data; name=\"${AdditionalParameters.multipartFieldName(name)}\"\r\n\r\n" +
                     value + "\r\n").toByteArray(Charsets.UTF_8)
             }
             val safeExtension = request.audioFile.extension.ifBlank { "bin" }
@@ -382,6 +384,14 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
     private class JobCancelledException : IOException()
 
     private companion object {
+        fun effectiveFields(request: Request): LinkedHashMap<String, String> =
+            request.additionalJson?.let { AdditionalParameters.transcriptionFields(request.model, it) }
+                ?: linkedMapOf("model" to request.model).apply {
+                    require("file" !in request.additionalFields) { AppStrings.get(R.string.val_additional_file_conflict, "The additional file parameter conflicts with the audio upload") }
+                    putAll(request.additionalFields)
+                    require(!get("model").isNullOrBlank()) { AppStrings.get(R.string.val_merged_model_empty, "The merged model cannot be empty") }
+                }
+
         const val CONNECT_TIMEOUT_MS = 15_000
         const val WRITE_TIMEOUT_MS = 30_000
         const val READ_TIMEOUT_MS = 60_000

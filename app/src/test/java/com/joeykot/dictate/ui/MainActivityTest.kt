@@ -1,17 +1,21 @@
 package com.joeykot.dictate.ui
 
 import android.content.Context
+import android.app.AlertDialog
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import com.joeykot.dictate.DictateApplication
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.model.AudioCodec
 import com.joeykot.dictate.model.AudioConfig
 import com.joeykot.dictate.model.AudioContainer
+import com.joeykot.dictate.model.PromptConfig
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,6 +26,8 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAlertDialog
+import org.robolectric.shadows.ShadowToast
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import java.util.concurrent.TimeUnit
@@ -38,12 +44,14 @@ class MainActivityTest {
         clearPreferences()
         application.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
             .edit()
+            .putString("app.language", "zh")
             .putInt(KEY_BIT_DEPTH, AudioConfig.DEFAULT_BIT_DEPTH)
             .putInt(KEY_SAMPLE_RATE, AudioConfig.DEFAULT_SAMPLE_RATE)
             .putString(KEY_CODEC, AudioCodec.OPUS.name)
             .putString(KEY_CONTAINER, AudioContainer.OGG.name)
             .putInt(KEY_BITRATE, AudioConfig.DEFAULT_BITRATE_KBPS)
             .commit()
+        AppStrings.refresh(application)
     }
 
     @After
@@ -116,7 +124,7 @@ class MainActivityTest {
             assertEquals("50%", findTextView(root, "50%")?.text?.toString())
 
             val scheme = spinnerForLabel(root, "色系搭配")
-            assertEquals("Custom", scheme.adapter.getItem(scheme.count - 1))
+            assertEquals("自定义", scheme.adapter.getItem(scheme.count - 1))
             val recordingColor = findTextView(root, "录制颜色")
                 ?: throw AssertionError("找不到录制颜色设置项")
             assertTrue(!recordingColor.isShown)
@@ -128,6 +136,116 @@ class MainActivityTest {
         } finally {
             controller.pause().stop().destroy()
         }
+    }
+
+    @Test
+    fun promptEditorRejectsInvalidJsonAndPreservesNullDeletionInstructions() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val activity = controller.get()
+            (findTextView(activity.window.decorView, "新增提示词") as Button).performClick()
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            val title = editTextForLabel(dialog.window!!.decorView, "标题")
+            val prompt = editTextForLabel(dialog.window!!.decorView, "提示词内容")
+            val json = editTextForLabel(dialog.window!!.decorView, "附加参数 JSON")
+            title.setText("总结重点")
+            prompt.setText("总结用户提供的文本")
+            json.setText("{invalid")
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            assertTrue(dialog.isShowing)
+            assertTrue(json.error != null)
+            assertTrue(application.settingsRepository.get().postProcessing.prompts.isEmpty())
+
+            val parameters = "{\"model\":\"other-model\",\"nested\":{\"remove\":null},\"array\":[1,2]}"
+            json.setText(parameters)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            assertTrue(waitUntil { application.settingsRepository.get().postProcessing.prompts.size == 1 })
+            shadowOf(Looper.getMainLooper()).idle()
+            val saved = application.settingsRepository.get().postProcessing.prompts.single()
+            assertEquals("总结重点", saved.title)
+            assertEquals(parameters, saved.additionalJson)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun promptReorderingSurvivesWholeFormSaveAndEditingAllowsDelete() {
+        val first = PromptConfig(title = "第一个", prompt = "总结")
+        val second = PromptConfig(title = "第二个", prompt = "翻译")
+        writePrompts(listOf(first, second))
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val activity = controller.get()
+            val root = activity.window.decorView
+            findViewWithDescription(root, "上移第二个")!!.performClick()
+            // Wait for the writer's main-thread completion, not just its preferences commit.
+            assertTrue(waitUntil {
+                application.settingsRepository.get().postProcessing.prompts.first().id == second.id &&
+                    findViewWithDescription(root, "上移第二个")?.isEnabled == false
+            })
+
+            (findTextView(root, "保存设置") as Button).performClick()
+            assertTrue(waitUntil {
+                application.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+                    .contains(KEY_BUTTON_SCALE) && ShadowToast.getTextOfLatestToast() == "设置已保存"
+            })
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(listOf(second.id, first.id),
+                application.settingsRepository.get().postProcessing.prompts.map { it.id })
+
+            findViewWithDescription(root, "编辑提示词：第二个")!!.performClick()
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).performClick()
+            assertTrue(waitUntil { application.settingsRepository.get().postProcessing.prompts.size == 1 })
+            assertEquals(first.id, application.settingsRepository.get().postProcessing.prompts.single().id)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun cancelPromptEditingKeepsSavedEntryUnchanged() {
+        val original = PromptConfig(title = "原始标题", prompt = "原始提示词")
+        writePrompts(listOf(original))
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            findViewWithDescription(controller.get().window.decorView, "编辑提示词：原始标题")!!.performClick()
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            editTextForLabel(dialog.window!!.decorView, "标题").setText("尚未保存")
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(original, application.settingsRepository.get().postProcessing.prompts.single())
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    private fun writePrompts(prompts: List<PromptConfig>) {
+        var failure: Throwable? = null
+        Thread {
+            try {
+                application.settingsRepository.savePrompts(prompts)
+            } catch (error: Throwable) {
+                failure = error
+            }
+        }.apply { start(); join() }
+        failure?.let { throw it }
+    }
+
+    private fun editTextForLabel(root: View, label: String): EditText {
+        val parent = findTextView(root, label)!!.parent as ViewGroup
+        return (0 until parent.childCount).map(parent::getChildAt).filterIsInstance<EditText>().single()
+    }
+
+    private fun findViewWithDescription(root: View, description: String): View? {
+        if (root.contentDescription?.toString() == description) return root
+        if (root is ViewGroup) {
+            for (index in 0 until root.childCount) {
+                findViewWithDescription(root.getChildAt(index), description)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun clearPreferences() {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_name">Dictate transcription vocale</string>
+    <string name="accessibility_service_description">Affiche un bouton vocal flottant sans prendre le focus, lit le texte sélectionné pour le post-traitement et insère les résultats dans le champ de saisie actif.</string>
+</resources>

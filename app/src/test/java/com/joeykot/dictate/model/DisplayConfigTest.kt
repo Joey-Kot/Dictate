@@ -54,9 +54,9 @@ class DisplayConfigTest {
             customPalette = OverlayPalette(recordingColor = 0x1_000000),
         ).validate()
 
-        assertTrue(errors.any { it.contains("按钮大小") })
-        assertTrue(errors.any { it.contains("按钮不透明度") })
-        assertTrue(errors.any { it.contains("录制颜色") })
+        assertTrue(errors.any { it.contains("Button size") })
+        assertTrue(errors.any { it.contains("Button opacity") })
+        assertTrue(errors.any { it.contains("Recording color") })
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.joeykot.dictate.model
 
+import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppStrings
 import kotlin.math.pow
 
 enum class AudioCodec(val value: String) {
@@ -36,7 +38,7 @@ data class AudioConfig(
      * is both the highest selectable output rate and the useful ceiling for the supported codecs.
      */
     fun resolvedForInput(inputSampleRateHz: Int): AudioConfig {
-        require(inputSampleRateHz > 0) { "输入采样率必须为正数" }
+        require(inputSampleRateHz > 0) { AppStrings.get(R.string.settings_input_sample_rate, "Input sample rate must be positive") }
         val resolvedSampleRate = if (sampleRate == AUTO_SAMPLE_RATE) {
             inputSampleRateHz.coerceAtMost(MAX_AUTO_OUTPUT_SAMPLE_RATE)
         } else {
@@ -60,13 +62,13 @@ data class AudioConfig(
     }
 
     fun validate(): List<String> = buildList {
-        if (bitDepth !in BIT_DEPTHS) add("位深必须为 ${BIT_DEPTHS.joinToString()} 位之一")
-        if (sampleRate !in SAMPLE_RATES) add("采样率不受支持")
+        if (bitDepth !in BIT_DEPTHS) add(AppStrings.get(R.string.settings_bit_depth, "Bit depth must be one of: %1\$s bits", BIT_DEPTHS.joinToString()))
+        if (sampleRate !in SAMPLE_RATES) add(AppStrings.get(R.string.settings_sample_rate_unsupported, "Unsupported sample rate"))
         if (codec != AudioCodec.PCM && bitrateKbps !in compatibleBitrates(codec, sampleRate)) {
-            add("${codec.value} 编码在当前采样率下不支持该码率")
+            add(AppStrings.get(R.string.settings_codec_bitrate, "The %1\$s codec does not support this bitrate at the selected sample rate", codec.value))
         }
         if (container !in compatibleContainers(codec)) {
-            add("${codec.value} 编码不能使用 ${container.value} 容器")
+            add(AppStrings.get(R.string.settings_codec_container, "The %1\$s codec cannot use the %2\$s container", codec.value, container.value))
         }
     }
 
@@ -137,9 +139,9 @@ data class RetryConfig(
     }
 
     fun validate(): List<String> = buildList {
-        if (maxRetries !in 0..10) add("最大重试次数必须在 0 到 10 之间")
+        if (maxRetries !in 0..10) add(AppStrings.get(R.string.settings_max_retries, "Maximum retries must be between 0 and 10"))
         if (!initialBackoffSeconds.isFinite() || initialBackoffSeconds !in 0.1..60.0) {
-            add("初始退避时间必须在 0.1 到 60 秒之间")
+            add(AppStrings.get(R.string.settings_initial_backoff, "Initial backoff must be between 0.1 and 60 seconds"))
         }
     }
 }
@@ -150,8 +152,8 @@ data class InteractionConfig(
     val alwaysCopyToClipboard: Boolean = true,
 ) {
     fun validate(): List<String> = buildList {
-        if (longPressMs !in 300L..5_000L) add("长按阈值必须在 300 到 5000 ms 之间")
-        if (doubleTapMs !in 150L..1_000L) add("双击间隔必须在 150 到 1000 ms 之间")
+        if (longPressMs !in 300L..5_000L) add(AppStrings.get(R.string.settings_long_press, "Long-press duration must be between 300 and 5000 ms"))
+        if (doubleTapMs !in 150L..1_000L) add(AppStrings.get(R.string.settings_double_tap, "Double-tap interval must be between 150 and 1000 ms"))
     }
 }
 
@@ -179,9 +181,9 @@ data class OverlayPalette(
     )
 
     fun validate(): List<String> = buildList {
-        if (!isValidRgb(recordingColor)) add("录制颜色必须是 #RRGGBB")
-        if (!isValidRgb(pausedColor)) add("暂停颜色必须是 #RRGGBB")
-        if (!isValidRgb(processingColor)) add("处理颜色必须是 #RRGGBB")
+        if (!isValidRgb(recordingColor)) add(AppStrings.get(R.string.settings_recording_color, "Recording color must use #RRGGBB"))
+        if (!isValidRgb(pausedColor)) add(AppStrings.get(R.string.settings_paused_color, "Paused color must use #RRGGBB"))
+        if (!isValidRgb(processingColor)) add(AppStrings.get(R.string.settings_processing_color, "Processing color must use #RRGGBB"))
     }
 
     companion object {
@@ -228,10 +230,10 @@ data class DisplayConfig(
 
     fun validate(): List<String> = buildList {
         if (!buttonScale.isFinite() || buttonScale !in MIN_BUTTON_SCALE..MAX_BUTTON_SCALE) {
-            add("按钮大小必须在 $MIN_BUTTON_SCALE 到 $MAX_BUTTON_SCALE 之间")
+            add(AppStrings.get(R.string.settings_button_scale, "Button size must be between %1\$s and %2\$s", MIN_BUTTON_SCALE, MAX_BUTTON_SCALE))
         }
         if (!buttonOpacity.isFinite() || buttonOpacity !in MIN_BUTTON_OPACITY..MAX_BUTTON_OPACITY) {
-            add("按钮不透明度必须在 $MIN_BUTTON_OPACITY 到 $MAX_BUTTON_OPACITY 之间")
+            add(AppStrings.get(R.string.settings_button_opacity, "Button opacity must be between %1\$s and %2\$s", MIN_BUTTON_OPACITY, MAX_BUTTON_OPACITY))
         }
         addAll(customPalette.validate())
     }
@@ -260,11 +262,14 @@ data class AppSettings(
     val retry: RetryConfig = RetryConfig(),
     val interaction: InteractionConfig = InteractionConfig(),
     val display: DisplayConfig = DisplayConfig(),
+    val postProcessing: PostProcessingConfig = PostProcessingConfig(),
+    val language: AppLanguage = AppLanguage.ENGLISH,
 )
 
 data class RuntimeSettings(
     val app: AppSettings,
     val apiKey: String,
+    val postProcessingApiKey: String = "",
 )
 
 enum class JobState {
@@ -278,6 +283,6 @@ enum class JobState {
 
 data class JobUiState(
     val state: JobState = JobState.IDLE,
-    val message: String = "空闲",
+    val message: String = AppStrings.get(R.string.runtime_idle, "Idle"),
     val amplitude: Float = 0f,
 )

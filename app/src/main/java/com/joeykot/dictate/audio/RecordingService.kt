@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.MediaRecorder
@@ -19,6 +20,8 @@ import android.os.Looper
 import android.os.PowerManager
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.R
+import com.joeykot.dictate.i18n.AppLocale
+import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.ui.MainActivity
 import java.io.File
@@ -32,6 +35,22 @@ class RecordingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var unexpectedShutdown = false
     private var capturePaused = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var destroyed = false
+    private val preferences by lazy {
+        getSharedPreferences(AppLocale.PREFERENCES_NAME, Context.MODE_PRIVATE)
+    }
+    private val languageListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppLocale.LANGUAGE_KEY) {
+            mainHandler.post {
+                if (!destroyed) {
+                    AppStrings.refresh(applicationContext)
+                    createNotificationChannel()
+                    if (recorder != null) updateNotification(capturePaused)
+                }
+            }
+        }
+    }
     private var sawActiveRecordingConfiguration = false
     private var lastRecordingConfigurationSummary: String? = null
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
@@ -44,16 +63,17 @@ class RecordingService : Service() {
                 sawActiveRecordingConfiguration = true
                 reportRecordingConfiguration(activeJobId, ownConfiguration)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ownConfiguration.isClientSilenced) {
-                    currentRecorder.fail("麦克风被其他应用或系统占用")
+                    currentRecorder.fail(AppStrings.get(R.string.runtime_microphone_busy, "The microphone is in use by another app or the system"))
                 }
             } else if (sawActiveRecordingConfiguration) {
-                currentRecorder.fail("麦克风录音被系统中断")
+                currentRecorder.fail(AppStrings.get(R.string.runtime_microphone_interrupted, "Microphone recording was interrupted by the system"))
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        preferences.registerOnSharedPreferenceChangeListener(languageListener)
         createNotificationChannel()
         runCatching {
             getSystemService(AudioManager::class.java).registerAudioRecordingCallback(
@@ -153,6 +173,9 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        destroyed = true
+        preferences.unregisterOnSharedPreferenceChangeListener(languageListener)
+        mainHandler.removeCallbacksAndMessages(null)
         runCatching {
             getSystemService(AudioManager::class.java).unregisterAudioRecordingCallback(recordingCallback)
         }
@@ -166,7 +189,10 @@ class RecordingService : Service() {
 
     private fun startCapture(jobId: Long, rawPath: String?) {
         if (jobId == NO_JOB || rawPath.isNullOrBlank()) {
-            applicationState.voiceJobController.onRecordingServiceFailed(jobId, "录音服务缺少任务参数")
+            applicationState.voiceJobController.onRecordingServiceFailed(
+                jobId,
+                AppStrings.get(R.string.runtime_service_parameters_missing, "The recording service is missing task parameters"),
+            )
             stopSelf()
             return
         }
@@ -193,7 +219,7 @@ class RecordingService : Service() {
             clearCaptureState()
             applicationState.voiceJobController.onRecordingServiceFailed(
                 jobId,
-                "无法启动前台麦克风服务：${error.message ?: error.javaClass.simpleName}",
+                AppStrings.get(R.string.runtime_foreground_start_failed, "Unable to start the foreground microphone service: %1\$s", error.message ?: error.javaClass.simpleName),
             )
             stopSelf()
             return
@@ -289,10 +315,10 @@ class RecordingService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Voice recording",
+            AppStrings.get(R.string.runtime_notification_channel, "Voice recording"),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shows when Dictate is actively using the microphone"
+            description = AppStrings.get(R.string.runtime_notification_channel_description, "Shows when Dictate is actively using the microphone")
             setSound(null, null)
             enableVibration(false)
         }
@@ -315,8 +341,20 @@ class RecordingService : Service() {
         val builder = Notification.Builder(this, CHANNEL_ID)
         return builder
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (paused) "Dictate 录音已暂停" else "Dictate 正在录音")
-            .setContentText(if (paused) "长按悬浮按钮恢复" else "麦克风正在使用中")
+            .setContentTitle(
+                if (paused) {
+                    AppStrings.get(R.string.runtime_notification_paused, "Dictate recording paused")
+                } else {
+                    AppStrings.get(R.string.runtime_notification_recording, "Dictate is recording")
+                },
+            )
+            .setContentText(
+                if (paused) {
+                    AppStrings.get(R.string.runtime_notification_resume_hint, "Long-press the floating button to resume")
+                } else {
+                    AppStrings.get(R.string.runtime_notification_microphone_active, "Microphone in use")
+                },
+            )
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -332,7 +370,7 @@ class RecordingService : Service() {
         private const val ACTION_CANCEL = "com.joeykot.dictate.action.CANCEL_RECORDING"
         private const val EXTRA_JOB_ID = "job_id"
         private const val EXTRA_RAW_PATH = "raw_path"
-        private const val CHANNEL_ID = "dictate_recording"
+        internal const val CHANNEL_ID = "dictate_recording"
         private const val NOTIFICATION_ID = 41
         private const val NO_JOB = -1L
         private const val WAKE_LOCK_TIMEOUT_MS = 6L * 60L * 60L * 1_000L
