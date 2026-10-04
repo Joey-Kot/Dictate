@@ -4,6 +4,24 @@
 
 Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦点的无障碍悬浮按钮操作。音频或选中文本直接发送到用户配置的指定服务，每次执行一个任务。转写和后处理共用同一个写入规则：实际写入时没有选区，就在当前光标处插入；有可编辑选区，就替换该段文本。
 
+## 操作演示与配置
+
+| [<img src="demo/Demo-ZH.gif" alt="Dictate 中文操作演示" width="320">](demo/Demo-ZH.gif) |
+| :---: |
+| **实际操作**<br>通过悬浮按钮录音转写，再选中文本，使用自定义提示词进行改写、翻译等操作。 |
+
+| [![权限设置](demo/1.%20Permissions.png)](demo/1.%20Permissions.png) | [![界面语言](demo/2.%20UI%20language.png)](demo/2.%20UI%20language.png) |
+| :---: | :---: |
+| **1. 权限设置**<br>启用无障碍服务并授予麦克风权限。 | **2. 界面语言**<br>支持英语、中文、日语、德语、法语和俄语，选择后保存生效。 |
+| [![录音设置](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) | [![音频 API 设置](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) |
+| **3. 录音设置**<br>选择输出采样率、编码、容器和比特率。 | **4. 音频 API 设置**<br>配置转写服务的 Base URL、API Key、模型及附加 JSON 参数，并通过真实转写请求测试连接。 |
+| [![改写 API 设置](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![提示词编辑](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
+| **5. 改写 API 设置**<br>配置文本后处理的服务商、Base URL、API Key 和模型，管理提示词顺序并测试连接。 | **6. 提示词编辑**<br>设置每条提示词的图标、标题、内容及独立附加 JSON 参数，可单独覆盖模型等请求参数。 |
+| [![重试设置](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![交互设置](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) |
+| **7. 重试设置**<br>开启自动重试，设置最大重试次数和初始等待时间。 | **8. 交互设置**<br>设置是否始终复制结果到剪贴板，以及长按阈值和双击最大间隔。 |
+| [![显示设置](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) | [![配置保存与导入导出](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) |
+| **9. 显示设置**<br>调整悬浮按钮大小、不透明度和各状态颜色，并管理通知设置。 | **10. 配置保存与导入导出**<br>保存设置，通过 JSON 导入或导出配置，以及查看或清空诊断信息。 |
+
 ## 音频转录功能介绍
 
 - 非 IME 形式，没有键盘、候选栏、历史列表、云账号或代理服务。

@@ -4,6 +4,24 @@ English | [简体中文](README_ZH.md)
 
 Dictate is an Android speech transcription and selected-text post-processing tool operated through an accessibility floating button that does not steal focus. Audio or selected text is sent directly to the service specified by the user, with one task executed at a time. Transcription and post-processing share the same write rule: if there is no selection when writing, the text is inserted at the current cursor position; if there is an editable selection, that portion of text is replaced.
 
+## Demo and Configuration
+
+| [<img src="demo/Demo-EN.gif" alt="Dictate in action in English" width="320">](demo/Demo-EN.gif) |
+| :---: |
+| **Dictate in action**<br>Use the floating button to transcribe speech, then select text and apply your own prompts to rewrite or translate it. |
+
+| [![Permissions](demo/1.%20Permissions.png)](demo/1.%20Permissions.png) | [![UI language](demo/2.%20UI%20language.png)](demo/2.%20UI%20language.png) |
+| :---: | :---: |
+| **1. Permissions**<br>Enable the accessibility service and grant microphone permission. | **2. UI language**<br>Choose English, Chinese, Japanese, German, French, or Russian, then save to apply. |
+| [![Audio Record Settings](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) | [![Audio API Settings](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) |
+| **3. Audio Record Settings**<br>Choose the output sample rate, codec, container, and bitrate. | **4. Audio API Settings**<br>Set the transcription Base URL, API Key, model, and additional JSON parameters; test with a real transcription request. |
+| [![Rewrite API Settings](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![Prompt editor](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
+| **5. Rewrite API Settings**<br>Configure the text-processing provider, Base URL, API Key, and model; manage prompt order and test the connection. | **6. Prompt editor**<br>Set each prompt's icon, title, instructions, and additional JSON parameters, including model overrides. |
+| [![Retry Settings](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![Interaction Settings](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) |
+| **7. Retry Settings**<br>Enable automatic retries and set the maximum retry count and initial delay. | **8. Interaction Settings**<br>Configure clipboard copying, the long-press threshold, and the maximum double-tap interval. |
+| [![Display Settings](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) | [![Configuration saving and import/export](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) |
+| **9. Display Settings**<br>Adjust the floating button's size, opacity, and state colors, and manage notification settings. | **10. Save, import, and export**<br>Save settings, import or export JSON configuration, and view or clear diagnostics. |
+
 ## Introduction to the Audio Transcription Feature
 
 - Non-IME format, with no keyboard, candidate bar, history list, cloud account, or proxy service.
