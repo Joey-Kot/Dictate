@@ -45,6 +45,10 @@ class SettingsRepositoryPostProcessingTest {
         for (version in 1..3) {
             val legacy = JSONObject(repository.exportJson()).apply {
                 put("schemaVersion", version)
+                getJSONObject("audioOutput").apply {
+                    put("bitrateKbps", getInt("bitrateBps") / 1000)
+                    remove("bitrateBps")
+                }
                 remove("postProcessing")
                 remove("promptIconAssets")
                 if (version == 1) remove("display")

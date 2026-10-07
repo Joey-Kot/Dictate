@@ -97,7 +97,7 @@
     <string name="main_scheme_sunset">Sunset</string>
     <string name="main_scheme_color_blind">Color-blind friendly</string>
     <string name="main_scheme_custom">Custom</string>
-    <string name="main_sample_rate_auto">Match recording input (up to 48 kHz)</string>
+    <string name="main_sample_rate_auto">Automatic (input and codec, up to 48 kHz)</string>
     <string name="main_color_picker">Circular color picker</string>
     <string name="main_about">About</string>
     <string name="main_about_author">Author</string>

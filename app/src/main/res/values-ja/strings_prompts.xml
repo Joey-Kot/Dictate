@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="prompt_same_provider">メインと同じプロバイダー</string>
+    <string name="prompt_test_api_help">現在の API 設定で一度だけテストします。プロンプト本文や追加 JSON は使用しません。事前の保存は不要です。</string>
     <string name="prompt_provider">Provider</string>
     <string name="prompt_base_url">Base URL</string>
     <string name="prompt_api_key">API Key</string>

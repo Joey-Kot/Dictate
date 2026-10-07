@@ -1,120 +1,80 @@
 package com.joeykot.dictate.model
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
 class AudioConfigTest {
-    @Test
-    fun codecContainerCompatibilityIsFixed() {
-        assertEquals(
-            listOf(AudioContainer.OPUS, AudioContainer.OGG),
-            AudioConfig.compatibleContainers(AudioCodec.OPUS),
-        )
-        assertEquals(listOf(AudioContainer.MP3), AudioConfig.compatibleContainers(AudioCodec.MP3))
-        assertEquals(listOf(AudioContainer.M4A), AudioConfig.compatibleContainers(AudioCodec.AAC))
-        assertEquals(listOf(AudioContainer.WAV), AudioConfig.compatibleContainers(AudioCodec.PCM))
+    @Test fun everyCodecHasValidDefaultsAndChoices() {
+        for (codec in AudioCodec.entries) {
+            val config = AudioConfig(codec = codec).normalized()
+            assertTrue("$config: ${config.validate()}", config.validate().isEmpty())
+            for (rate in AudioConfig.compatibleSampleRates(codec)) {
+                val atRate = config.copy(sampleRate = rate).normalized()
+                for (container in AudioConfig.compatibleContainers(codec, rate, atRate.bitDepth)) {
+                    assertTrue(atRate.copy(container = container).validate().isEmpty())
+                }
+            }
+        }
     }
 
-    @Test
-    fun normalizationReplacesInvalidContainer() {
-        val normalized = AudioConfig(
-            codec = AudioCodec.AAC,
-            container = AudioContainer.MP3,
-        ).normalized()
-        assertEquals(AudioContainer.M4A, normalized.container)
+    @Test fun normalizationPreservesExistingSelections() {
+        val ogg = AudioConfig(codec = AudioCodec.OPUS, container = AudioContainer.OGG)
+        assertEquals(ogg, ogg.normalized())
+        for (depth in AudioConfig.BIT_DEPTHS) {
+            val pcm = AudioConfig(codec = AudioCodec.PCM, container = AudioContainer.WAV, bitDepth = depth)
+            assertEquals(pcm, pcm.normalized())
+            assertTrue(pcm.validate().isEmpty())
+        }
     }
 
-    @Test
-    fun normalizationPreservesCompatibleOggContainer() {
-        val normalized = AudioConfig(
-            codec = AudioCodec.OPUS,
-            container = AudioContainer.OGG,
-        ).normalized()
-        assertEquals(AudioContainer.OGG, normalized.container)
+    @Test fun invalidManualSettingsAreRejectedBeforeConversion() {
+        assertTrue(AudioConfig(codec = AudioCodec.OPUS, sampleRate = 44100).validate().isNotEmpty())
+        assertTrue(AudioConfig(codec = AudioCodec.AMR, sampleRate = 48000).validate().isNotEmpty())
+        assertTrue(AudioConfig(codec = AudioCodec.AAC, container = AudioContainer.MP3).validate().isNotEmpty())
+        assertTrue(AudioConfig(codec = AudioCodec.AAC, container = AudioContainer.WAV).validate().isNotEmpty())
+        assertTrue(AudioConfig(codec = AudioCodec.OPUS, bitrateBps = 320000).validate().isNotEmpty())
+        assertThrows(IllegalArgumentException::class.java) { AudioConfig(sampleRate = 12345).resolvedForInput(48000) }
     }
 
-    @Test
-    fun opusRejectsUnsupported320Kbps() {
-        val normalized = AudioConfig(
-            codec = AudioCodec.OPUS,
-            container = AudioContainer.OPUS,
-            bitrateKbps = 320,
-        ).normalized()
-        assertEquals(AudioConfig.DEFAULT_BITRATE_KBPS, normalized.bitrateKbps)
-        assertFalse(320 in AudioConfig.compatibleBitrates(AudioCodec.OPUS, 16_000))
+    @Test fun automaticRateAdaptsToEncoderWithoutChangingPreferences() {
+        val expected = mapOf(AudioCodec.AMR to 8000, AudioCodec.AMR_WB to 16000, AudioCodec.SPEEX to 32000, AudioCodec.OPUS to 48000)
+        for ((codec, rate) in expected) {
+            val config = AudioConfig(codec = codec).normalized()
+            assertEquals(rate, config.resolvedForInput(44100).sampleRate)
+            assertEquals(0, config.sampleRate)
+        }
+        assertEquals(48000, AudioConfig().resolvedForInput(96000).sampleRate)
+        assertEquals(44100, AudioConfig().resolvedForInput(44100).sampleRate)
+        assertEquals(16000, AudioConfig.nearestSampleRate(AudioCodec.OPUS, 20000))
     }
 
-    @Test
-    fun bitrateChoicesAvoidEncoderClamping() {
-        assertEquals(
-            listOf(16, 32, 64),
-            AudioConfig.compatibleBitrates(AudioCodec.MP3, 8_000),
-        )
-        assertEquals(
-            listOf(16, 32, 64, 128),
-            AudioConfig.compatibleBitrates(AudioCodec.MP3, 16_000),
-        )
-        assertEquals(
-            listOf(32, 64, 128, 192, 256, 320),
-            AudioConfig.compatibleBitrates(AudioCodec.MP3, 48_000),
-        )
-        assertEquals(
-            listOf(16, 32),
-            AudioConfig.compatibleBitrates(AudioCodec.AAC, 8_000),
-        )
-        assertEquals(
-            listOf(16, 32, 64, 128, 192, 256),
-            AudioConfig.compatibleBitrates(AudioCodec.AAC, 48_000),
-        )
+    @Test fun automaticRateReconcilesBitrateButPreservesContainer() {
+        val config = AudioConfig(bitrateBps = 320000)
+        assertEquals(64000, config.resolvedForInput(8000).bitrateBps)
+        assertEquals(320000, config.bitrateBps)
+        for (codec in AudioCodec.entries) {
+            for (container in AudioConfig.compatibleContainers(codec)) {
+                val selected = AudioConfig(codec = codec, container = container).normalized()
+                for (inputRate in listOf(8000, 11025, 16000, 44100, 48000, 96000)) {
+                    assertEquals("$codec $container $inputRate", container, selected.resolvedForInput(inputRate).container)
+                }
+            }
+        }
     }
 
-    @Test
-    fun pcmUsesBitDepthAndHidesBitrateAtUiLayer() {
-        val valid = AudioConfig(
-            bitDepth = 24,
-            codec = AudioCodec.PCM,
-            container = AudioContainer.WAV,
-        )
-        val invalid = valid.copy(container = AudioContainer.OGG)
-        assertTrue(valid.validate().isEmpty())
-        assertFalse(invalid.validate().isEmpty())
+    @Test fun amrUsesExactBitratesAndLosslessDoesNotHaveTargetBitrate() {
+        assertEquals(listOf(4750, 5150, 5900, 6700, 7400, 7950, 10200, 12200), AudioConfig.compatibleBitrates(AudioCodec.AMR, 8000))
+        assertTrue(23850 in AudioConfig.compatibleBitrates(AudioCodec.AMR_WB, 16000))
+        for (codec in listOf(AudioCodec.FLAC, AudioCodec.ALAC, AudioCodec.WAVPACK, AudioCodec.PCM)) {
+            assertTrue(AudioConfig.compatibleBitrates(codec, 16000).isEmpty())
+        }
     }
 
-    @Test
-    fun automaticOutputRateFollowsTheCaptureRate() {
-        val resolved = AudioConfig(
-            sampleRate = AudioConfig.AUTO_SAMPLE_RATE,
-            codec = AudioCodec.MP3,
-            bitrateKbps = 128,
-        ).resolvedForInput(48_000)
-
-        assertEquals(48_000, resolved.sampleRate)
-        assertEquals(128, resolved.bitrateKbps)
-    }
-
-    @Test
-    fun automaticOutputRateCapsHighRateCaptureAt48Khz() {
-        val resolved = AudioConfig(
-            sampleRate = AudioConfig.AUTO_SAMPLE_RATE,
-            codec = AudioCodec.AAC,
-            bitrateKbps = 256,
-        ).resolvedForInput(96_000)
-
-        assertEquals(48_000, resolved.sampleRate)
-        assertEquals(256, resolved.bitrateKbps)
-    }
-
-    @Test
-    fun automaticOutputNormalizesBitrateForLowRateCapture() {
-        val resolved = AudioConfig(
-            sampleRate = AudioConfig.AUTO_SAMPLE_RATE,
-            codec = AudioCodec.MP3,
-            bitrateKbps = 320,
-        ).resolvedForInput(8_000)
-
-        assertEquals(8_000, resolved.sampleRate)
-        assertEquals(64, resolved.bitrateKbps)
+    @Test fun pcmWidthDeterminesRawContainerAndEncoder() {
+        val pcm = AudioConfig(codec = AudioCodec.PCM, bitDepth = 24, container = AudioContainer.S24LE)
+        assertEquals("pcm_s24le", pcm.encoder())
+        assertTrue(pcm.validate().isEmpty())
+        assertTrue(pcm.copy(bitDepth = 16).validate().isNotEmpty())
+        assertEquals("pcm_u8", pcm.copy(bitDepth = 8).encoder())
     }
 }

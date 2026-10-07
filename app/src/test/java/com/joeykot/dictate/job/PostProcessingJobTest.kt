@@ -10,12 +10,16 @@ import com.joeykot.dictate.model.JobState
 import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.model.PostProcessingConfig
 import com.joeykot.dictate.model.PostProcessingProvider
+import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.model.RetryConfig
 import com.joeykot.dictate.model.RuntimeSettings
+import com.joeykot.dictate.settings.TestAndroidKeyStore
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -55,6 +59,7 @@ class PostProcessingJobTest {
     private val recordingBytes = ByteArray(6_400) { (it % 127).toByte() }
     private val requestCount = AtomicInteger()
     private val requestBodies = CopyOnWriteArrayList<String>()
+    private val requestHeaders = CopyOnWriteArrayList<String>()
     private val serverErrors = CopyOnWriteArrayList<Exception>()
 
     @Volatile
@@ -79,7 +84,7 @@ class PostProcessingJobTest {
                     server.accept().use { socket ->
                         activeSocket = socket
                         socket.soTimeout = 5_000
-                        requestBodies += socket.readRequestBody()
+                        requestBodies += socket.readRequestBody { requestHeaders += it }
                         respond(requestCount.incrementAndGet(), socket)
                     }
                 } catch (error: Exception) {
@@ -99,6 +104,129 @@ class PostProcessingJobTest {
         // The application owns these long-lived executors; terminate them between test sandboxes.
         executor("worker").shutdownNow()
         executor("scheduler").shutdownNow()
+    }
+
+    @Test
+    fun promptTestUsesUnsavedApiAndFixedProbeEvenWithInvalidPromptAndRetrySettings() {
+        val base = runtime()
+        val settings = base.copy(app = base.app.copy(
+            postProcessing = PostProcessingConfig(),
+            retry = RetryConfig(enabled = true, maxRetries = -1),
+        ), promptApiKeys = mapOf("draft" to "stale-saved-key"))
+        val draft = PromptConfig(id = "draft", provider = PostProcessingProvider.ANTHROPIC,
+            baseUrl = base.app.postProcessing.baseUrl, model = "unsaved-model", additionalJson = "invalid json")
+        respond = { _, socket -> socket.reply(200, """{"content":[{"type":"text","text":"OK"}]}""") }
+        val results = mutableListOf<VoiceJobController.ConnectionTestResult>()
+
+        assertNotNull(controller.testPromptConnection(settings, draft, "unsaved-key") { results += it })
+        await { results.isNotEmpty() }
+
+        assertTrue(results.single().success)
+        assertEquals("OK", results.single().text)
+        assertTrue(requestHeaders.single().startsWith("POST /v1/messages "))
+        assertTrue(requestHeaders.single().contains("x-api-key: unsaved-key", ignoreCase = true))
+        assertFalse(requestHeaders.single().contains("Authorization:", ignoreCase = true))
+        val body = JSONObject(requestBodies.single())
+        assertEquals("unsaved-model", body.getString("model"))
+        assertEquals("Reply briefly with OK.", body.getString("system"))
+        assertEquals("Connection test.", body.getJSONArray("messages").getJSONObject(0).getString("content"))
+        assertTrue(application.settingsRepository.get().postProcessing.prompts.isEmpty())
+        assertNoDeliverySideEffects()
+    }
+
+    @Test
+    fun promptTestNeverRetriesButPreservesHttpFailureAndRedactsItsOwnKey() {
+        respond = { _, socket -> socket.reply(503, """{"error":"unsaved-key is temporarily unavailable"}""") }
+        val results = mutableListOf<VoiceJobController.ConnectionTestResult>()
+        val states = mutableListOf<JobState>()
+        controller.addListener { states += it.state }
+        assertNotNull(controller.testPromptConnection(runtime(retryEnabled = true), draft(), "unsaved-key") { results += it })
+        await { results.isNotEmpty() }
+
+        assertEquals(1, requestCount.get())
+        assertFalse(states.contains(JobState.RETRY_WAITING))
+        assertFalse(results.single().success)
+        assertEquals(503, results.single().statusCode)
+        assertFalse(results.single().serverSummary.contains("unsaved-key"))
+        assertNoDeliverySideEffects()
+    }
+
+    @Test
+    fun blankIndependentFieldsFailWithoutUsingTheValidMainApi() {
+        listOf(draft().copy(baseUrl = "") to "key", draft().copy(model = "") to "key", draft() to "").forEach { (prompt, key) ->
+            val results = mutableListOf<VoiceJobController.ConnectionTestResult>()
+            controller.testPromptConnection(runtime(), prompt, key) { results += it }
+            await { results.isNotEmpty() }
+            assertFalse(results.single().success)
+            assertEquals(JobState.IDLE, controller.currentState().state)
+        }
+        assertEquals(0, requestCount.get())
+        assertNoDeliverySideEffects()
+    }
+
+    @Test
+    fun promptCancellationIsScopedToItsJobAndDiscardsLateResults() {
+        val cancelled = mutableListOf<VoiceJobController.ConnectionTestResult>()
+        val oldId = checkNotNull(controller.testPromptConnection(runtime(), draft(), "key") { cancelled += it })
+        drainWorker()
+        controller.cancelPromptConnectionTest(oldId + 1)
+        assertEquals(JobState.REQUESTING, controller.currentState().state)
+        controller.cancelPromptConnectionTest(oldId)
+        assertFalse(cancelled.single().success)
+
+        val next = mutableListOf<VoiceJobController.ConnectionTestResult>()
+        assertNotNull(controller.testPromptConnection(runtime(), draft(), "key") { next += it })
+        controller.cancelPromptConnectionTest(oldId)
+        assertEquals(JobState.REQUESTING, controller.currentState().state)
+        await { next.isNotEmpty() }
+        assertTrue(next.single().success)
+        assertEquals(1, cancelled.size)
+
+        val shared = mutableListOf<VoiceJobController.ConnectionTestResult>()
+        assertTrue(controller.testPostProcessingConnection(runtime()) { shared += it })
+        val sharedId = (VoiceJobController::class.java.getDeclaredField("nextJobId")
+            .apply { isAccessible = true }.get(controller) as java.util.concurrent.atomic.AtomicLong).get()
+        controller.cancelPromptConnectionTest(sharedId)
+        await { shared.isNotEmpty() }
+        assertTrue(shared.single().success)
+        assertEquals(3, requestCount.get())
+        assertNoDeliverySideEffects()
+    }
+
+    @Test
+    fun actualPromptExecutionKeepsItsIndependentApiSnapshotAcrossRetryAndSettingsChanges() {
+        TestAndroidKeyStore.install()
+        try {
+            val prompt = draft().copy(provider = PostProcessingProvider.ANTHROPIC, title = "Saved", prompt = "Summarize",
+                additionalJson = """{"stream":true,"temperature":0.3}""")
+            val settings = runtime(retryEnabled = true).app.copy(postProcessing = PostProcessingConfig(prompts = listOf(prompt)))
+            val repository = application.settingsRepository
+            background { repository.save(settings, "", "", mapOf(prompt.id to "saved-prompt-key")) }
+            respond = { attempt, socket ->
+                if (attempt == 1) socket.reply(503, """{"error":"busy"}""")
+                else socket.reply(200,
+                    "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"Rewritten text\"}}\n\n" +
+                        "data: {\"type\":\"message_stop\"}\n\n", "text/event-stream")
+            }
+
+            assertTrue(controller.startPostProcessing("Original text", prompt.id))
+            await { controller.currentState().state == JobState.RETRY_WAITING }
+            background { repository.savePrompts(listOf(prompt.copy(provider = PostProcessingProvider.GOOGLE,
+                baseUrl = "https://changed.example", model = "different-model")), mapOf(prompt.id to "different-key")) }
+            await { controller.currentState().state == JobState.IDLE }
+
+            assertEquals(2, requestCount.get())
+            assertEquals(requestBodies[0], requestBodies[1])
+            requestHeaders.forEach {
+                assertTrue(it.startsWith("POST /v1/messages "))
+                assertTrue(it.contains("x-api-key: saved-prompt-key", ignoreCase = true))
+                assertFalse(it.contains("different-key"))
+            }
+            assertEquals(0.3, JSONObject(requestBodies[0]).getDouble("temperature"), 0.0)
+            assertEquals("Rewritten text", clipboard.primaryClip!!.getItemAt(0).text.toString())
+            assertEquals(previousRecording, application.audioFileStore.lastRecording()!!.file)
+            assertArrayEquals(recordingBytes, previousRecording.readBytes())
+        } finally { TestAndroidKeyStore.remove() }
     }
 
     @Test
@@ -253,6 +381,15 @@ class PostProcessingJobTest {
         assertNoDeliverySideEffects()
     }
 
+    private fun draft() = PromptConfig(provider = PostProcessingProvider.OPENAI_COMPATIBLE,
+        baseUrl = "http://127.0.0.1:${server.localPort}/v1", model = "draft-model")
+
+    private fun background(block: () -> Unit) {
+        val future = java.util.concurrent.FutureTask(block, Unit)
+        Thread(future).start()
+        future.get(5, TimeUnit.SECONDS)
+    }
+
     private fun runtime(retryEnabled: Boolean = false): RuntimeSettings = RuntimeSettings(
         app = AppSettings(
             retry = RetryConfig(enabled = retryEnabled, maxRetries = 1, initialBackoffSeconds = 0.1),
@@ -300,7 +437,7 @@ class PostProcessingJobTest {
 
         fun success(text: String): String = """{"choices":[{"message":{"content":"$text"}}]}"""
 
-        fun Socket.readRequestBody(): String {
+        fun Socket.readRequestBody(onHeaders: (String) -> Unit): String {
             val input = getInputStream()
             val headers = ByteArrayOutputStream()
             while (true) {
@@ -311,6 +448,7 @@ class PostProcessingJobTest {
                 if (headers.toString("UTF-8").endsWith("\r\n\r\n")) break
             }
             val headerText = headers.toString("UTF-8")
+            onHeaders(headerText)
             check(headerText.startsWith("POST /v1/chat/completions ") || headerText.startsWith("POST /v1/messages "))
             val length = headerText.lineSequence()
                 .first { it.startsWith("Content-Length:", ignoreCase = true) }

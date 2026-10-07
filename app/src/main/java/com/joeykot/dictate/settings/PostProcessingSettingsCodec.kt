@@ -25,6 +25,9 @@ internal object PostProcessingSettingsCodec {
                 .put("customIcon", prompt.customIcon ?: JSONObject.NULL)
                 .put("title", prompt.title.trim())
                 .put("prompt", prompt.prompt)
+                .put("provider", prompt.provider?.name ?: JSONObject.NULL)
+                .put("baseUrl", prompt.baseUrl.trim())
+                .put("model", prompt.model.trim())
                 .put("additionalParameters", AdditionalParameters.parseObject(prompt.additionalJson)))
         }
     }
@@ -59,6 +62,13 @@ internal object PostProcessingSettingsCodec {
             title = string(item, "title"),
             prompt = string(item, "prompt"),
             additionalJson = if (extra.length() == 0) "" else extra.toString(),
+            provider = if (!item.has("provider") || item.isNull("provider")) null else {
+                val name = string(item, "provider")
+                PostProcessingProvider.entries.find { it.name == name }
+                    ?: throw IllegalArgumentException(AppStrings.get(R.string.val_post_provider_invalid, "Invalid postProcessing.provider"))
+            },
+            baseUrl = if (item.has("baseUrl")) string(item, "baseUrl") else "",
+            model = if (item.has("model")) string(item, "model") else "",
         )
     }
 

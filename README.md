@@ -16,7 +16,7 @@ Dictate is an Android speech transcription and selected-text post-processing too
 | [![Audio Record Settings](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) | [![Audio API Settings](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) |
 | **3. Audio Record Settings**<br>Choose the output sample rate, codec, container, and bitrate. | **4. Audio API Settings**<br>Set the transcription Base URL, API Key, model, and additional JSON parameters; test with a real transcription request. |
 | [![Rewrite API Settings](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![Prompt editor](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
-| **5. Rewrite API Settings**<br>Configure the text-processing provider, Base URL, API Key, and model; manage prompt order and test the connection. | **6. Prompt editor**<br>Set each prompt's icon, title, instructions, and additional JSON parameters, including model overrides. |
+| **5. Rewrite API Settings**<br>Configure the text-processing provider, Base URL, API Key, and model; manage prompt order and test the connection. | **6. Prompt editor**<br>Set each prompt's provider, icon, title, instructions, and additional JSON; inherit the main Provider or configure and test an independent API. |
 | [![Retry Settings](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![Interaction Settings](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) |
 | **7. Retry Settings**<br>Enable automatic retries and set the maximum retry count and initial delay. | **8. Interaction Settings**<br>Configure clipboard copying, the long-press threshold, and the maximum double-tap interval. |
 | [![Display Settings](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) | [![Configuration saving and import/export](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) |
@@ -28,8 +28,8 @@ Dictate is an Android speech transcription and selected-text post-processing too
 - `AudioRecord` PCM capture at the active input route's selected sample rate, in 16-bit mono, with pause/resume, microphone foreground service, wake lock, and cancellation.
 - Draggable, non-focusable accessibility overlay with persisted, inset-aware screen position; its size, opacity, and recording/paused/processing color scheme are configurable and update without restarting the accessibility service.
 - An in-progress recording continues while the screen is off; no lock-screen controls or lock-screen text insertion are provided.
-- Build FFmpeg `n8.1`, Opus `1.5.2`, and LAME `3.100` from source; currently, only `arm64-v8a` prebuilt binaries are provided.
-- Opus, MP3, AAC, and PCM/WAV output with valid codec/container choices only; output rate follows the active capture rate by default (capped at 48 kHz).
+- Build FFmpeg `8.1` with Opus, LAME, Vorbis, AMR-NB/WB, and Speex from verified source archives; currently, only `arm64-v8a` binaries are provided.
+- 28 audio encoding choices, including lossless formats, speech codecs, WMA, ADPCM, and integer/floating-point PCM. Settings show compatible rates, bit depths, containers, and bitrates; conversion happens after recording. Automatic output adapts to the encoder and capture rate, capped at 48 kHz.
 - Send multipart requests directly to the OpenAI-Compatible `/v1/audio/transcriptions`; successful responses must contain a non-empty top-level `text` string. Support for APIs other than OpenAI-Compatible is not currently considered. If you need services from other providers, you may use any compatible conversion service to convert them for use as OpenAI-Compatible.
 - The clipboard safety copy is enabled by default; when disabled, clipboard is used only after an explicit insertion failure.
 - Cancellable FFmpeg process, HTTP request, and exponential retry wait, all protected by a monotonically increasing task ID.
@@ -39,8 +39,9 @@ Dictate is an Android speech transcription and selected-text post-processing too
 
 - Select text, hold the idle floating button, and choose a prompt from the menu to process the selection. With no selected text or no saved prompts, holding the button resends the previous recording.
 - Configure Provider, Base URL, API Key, and Model independently under **Rewrite API Settings**. Supported providers are OpenAI-Compatible, OpenAI Responses, OpenAI Completions, Google, Anthropic, DeepSeek, Qwen, and GLM.
+- Prompts default to **Same as main provider**, inheriting all Rewrite API settings. Each prompt can instead use its own Provider, Base URL, API Key, and Model, with a Test connection button that works before saving.
 - Each prompt has an icon, title, instructions, and its own additional JSON parameters. Saved prompts can be edited, deleted, and reordered; choose from eight built-in icons or import SVG, PNG, or JPG.
-- Per-prompt JSON overrides request fields, including the shared `model`. Nested objects merge recursively, arrays are replaced as a whole, other values overwrite existing values, and object fields explicitly set to `null` are removed from the request.
+- Per-prompt JSON overrides request fields, including the selected API's `model`. Nested objects merge recursively, arrays are replaced as a whole, other values overwrite existing values, and object fields explicitly set to `null` are removed from the request.
 - Use your own prompts to polish, rewrite, translate, or summarize existing text or a completed transcription, without starting another recording.
 - Post-processing preserves the previous recording. It shares transcription's processing state, double-tap cancellation, automatic retries, and write behavior: insert at the current cursor, or replace the editable selection present when writing.
 
@@ -200,7 +201,7 @@ Internal task states remain idle, recording, paused, transcoding, requesting, an
 - Android 8.0+ (`minSdk 26`) on an `arm64-v8a` device.
 - Enabled Dictate accessibility service; recording additionally needs microphone permission.
 - Transcription needs an OpenAI-compatible `POST /v1/audio/transcriptions` endpoint, Base URL, API Key, and model.
-- Post-processing needs its own Provider, Base URL, API Key, model configuration, and at least one saved prompt.
+- Post-processing needs valid Provider, Base URL, API Key, and model settings, either shared or configured per prompt, and at least one saved prompt.
 
 Selection reading and text delivery depend on the target application's accessibility support. Read-only selections can supply post-processing input; password fields, protected screens, and custom controls may hide selections or reject writing. The existing clipboard fallback handles unavailable editable focus. Dictate does not contain per-app compatibility logic.
 
@@ -222,7 +223,17 @@ The FFmpeg script writes `app/src/main/jniLibs/arm64-v8a/libffmpeg.so`, which is
 
 Release builds enable R8 code shrinking, optimization, obfuscation, and resource shrinking. CI archives `mapping.txt` as a workflow artifact for recovering original crash stack traces. Debug builds remain unminified.
 
-The script verifies the official FFmpeg `8.1`, Opus `1.5.2`, and LAME `3.100` source archives by SHA-256, builds only AArch64, checks every required demuxer/encoder/muxer/filter, and emits a 16 KiB-page-compatible Android PIE executable named `libffmpeg.so`.
+The native build requires Linux, `make`, `pkg-config`, `curl`, `tar`, and XZ support. The script verifies the FFmpeg `8.1`, Opus `1.5.2`, LAME `3.100`, libogg `1.3.5`, libvorbis `1.3.7`, OpenCORE AMR `0.1.6`, VisualOn AMR-WB `0.1.3`, and Speex `1.2.1` source archives by SHA-256. It builds only AArch64, checks every required demuxer/encoder/muxer/filter, and verifies the resulting Android PIE executable's 16 KiB load alignment. This FFmpeg build uses `--enable-gpl --enable-version3`; dependency licenses and checksums are recorded in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+After the native build, audio integration tests can run the packaged Android binary under QEMU with the Android 8 runtime. They require `qemu-user` (`qemu-aarch64`), `e2fsprogs` (`debugfs`), Python 3, and a host C compiler. The script extracts the runtime without mounting the SDK image and builds an independent FFmpeg 8.1 decoder/probe from the downloaded sources.
+
+```bash
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-26;default;arm64-v8a'
+DICTATE_AUDIO_FULL=1 ./scripts/test-android-audio.sh
+./gradlew :app:testDebugUnitTest :app:lintDebug
+```
+
+The full audio matrix checks every offered codec/container, sample-rate preset, and selectable bit depth, using default/minimum/maximum bitrates and every AMR/Speex mode. It checks decoded audio, stream metadata, raw PCM size/byte order, and exact mono duplication into two and six channels. CI runs this matrix before release packaging. QEMU validation does not replace microphone and device testing.
 
 The packaged connectivity-test clip is a synthetic 16 kHz mono rendering of the word “test”, generated from Flite `2.2`'s `cmu_us_slt` voice. Its reproducible generation command is in `scripts/generate-connectivity-test-audio.sh`; provenance and the CMU notice are recorded in `THIRD_PARTY_LICENSES.md`.
 
@@ -251,15 +262,56 @@ The settings sections have no numbers: Audio Record Settings, Audio API Settings
 
 The notification switch reflects the system's actual app and recording-channel settings. Tap it to open system notification settings; its state refreshes when you return. Disabling notifications does not stop recording. On Android 13 and newer, the system may still show the running foreground service in its task manager even when notification-drawer notifications are disabled. This system setting is not part of exported app configuration.
 
+### Audio encoding settings
+
+Recording stays at 16-bit mono PCM at the active route's capture rate. FFmpeg converts the sample format/bit depth and resamples when encoding. All currently offered encoders accept mono; if an encoder requires more channels, the conversion path copies the source into every channel of its smallest supported layout.
+
+The default remains MP3, automatic sample rate, and 128 kbps. Automatic mode selects the nearest supported rate to the capture rate capped at 48 kHz, preferring the lower rate on a tie. If the saved bitrate is incompatible with that rate, the current recording uses the encoder's default bitrate for the resolved rate; saved preferences are retained. Manual rate presets are 7.35, 8, 11.025, 12, 16, 22.05, 24, 32, 44.1, 48, 64, 88.2, 96, 176.4, and 192 kHz, filtered by encoder.
+
+| Encoding choice | Output containers | Rate/depth restrictions |
+|---|---|---|
+| Opus | OPUS, OGG, WEBM, MP4, MKV, MKA | 8 / 12 / 16 / 24 / 48 kHz |
+| MP3 | MP3, WAV, AVI, MKV, MKA, MPEG; MP4/FLV where supported | Presets from 8–48 kHz; see container restrictions below |
+| AAC | M4A, MP4, AAC (ADTS), FLV, MKV, MKA, MOV | Presets up to 96 kHz; AAC/WAV is excluded because it cannot reliably round-trip |
+| Vorbis | OGG, WEBM, MKV, MKA | Presets from 8–48 kHz |
+| FLAC | FLAC, OGG, MKV, MKA | 16 / 24-bit output |
+| ALAC | M4A, MP4, MOV | 16 / 24-bit output |
+| AC-3 | AC3, M4A, MP4, WAV, AVI, MKV, MKA, MPEG | 32 / 44.1 / 48 kHz |
+| E-AC-3 | EAC3, MP4, MKV, MKA | 32 / 44.1 / 48 kHz |
+| MP2 | WAV, MP4, MPEG | 16 / 22.05 / 24 / 32 / 44.1 / 48 kHz |
+| ADPCM (MS) | WAV | Converted from PCM16 |
+| AMR-NB | AMR, WAV | 8 kHz; exact 4.75–12.2 kbps modes |
+| AMR-WB | AMR | 16 kHz; exact 6.6–23.85 kbps modes |
+| Speex | SPX, OGG | 8 / 16 / 32 kHz; exact bitrate modes for the selected rate |
+| WavPack | WV | 16 / 24 / 32-bit output |
+| WMA v1 / v2 | WMA, ASF | Presets from 8–48 kHz |
+| PCM | WAV; MP4, MOV and matching S16LE/S24LE/S32LE raw output for 16/24/32-bit; AVI for 16-bit | 8 / 16 / 24 / 32-bit; unsigned 8-bit uses WAV |
+| PCM 8-bit (signed) | AIFF, S8 | Fixed signed 8-bit |
+| PCM A-law / μ-law | WAV, matching ALAW/MULAW raw output | Fixed companded format |
+| PCM Float 32/64-bit (LE) | WAV, MP4, matching F32LE/F64LE raw output | Fixed floating-point format |
+| PCM 64-bit (LE) | WAV | Fixed signed 64-bit |
+| PCM 16/24/32-bit (BE) | AIFF, MP4, matching S16BE/S24BE/S32BE raw output | Fixed big-endian integer format |
+| PCM Float 32/64-bit (BE) | AIFF, MP4, matching F32BE/F64BE raw output | Fixed big-endian floating-point format |
+
+MP3 in MP4 requires at least 16 kHz. MP3 in FLV is offered only at 11.025, 22.05, 44.1, or 48 kHz. Automatic MP3 mode offers the common container set without MP4/FLV so an input-route change preserves the selected container. Encoders without a rate restriction in the table use the full preset list.
+
+Bit-depth controls appear for PCM, FLAC, ALAC, and WavPack; target-bitrate controls appear only for encoders that use them. Bitrates are stored and passed to FFmpeg in exact bits per second, so values such as AMR-NB 4.75 kbps and AMR-WB 23.85 kbps are preserved. Container extension and upload MIME type come from the resolved encoding settings, including `audio/amr-wb` for AMR-WB and `application/octet-stream` for raw PCM.
+
+This table describes local output support. The configured transcription service must also accept the chosen encoding, container, and sample rate. Raw PCM has no format header; its receiver needs the matching sample format, rate, and channel count. Use the endpoint test with the intended settings to check service compatibility.
+
 ### Post-processing configuration
 
 Shared fields are Provider, Base URL, API Key, and Model, followed by Add prompt, the saved prompt list, and Test connection. Providers are OpenAI-Compatible, OpenAI Responses, OpenAI Completions, Google, Anthropic, DeepSeek, Qwen, and GLM. OpenAI Completions uses `/chat/completions`. Saved instructions use the provider's system/developer instruction level; selected text supplies the user input.
 
-Add a prompt or tap an existing entry to edit its icon, title, instructions, and its own additional JSON. Prompt edits save immediately. Existing entries can be deleted in the dialog or reordered with the list's up/down buttons. Shared fields use the main Save settings button. Transcription and post-processing store separate API Keys.
+Add a prompt or tap an existing entry to edit its Provider, icon, title, instructions, and additional JSON. Saving the dialog immediately persists that prompt and its independent API Key. Titles, instructions, and additional JSON are validated when saving; API fields may be incomplete and are checked when testing or executing. Existing entries can be deleted in the dialog or reordered with the list's up/down buttons. Shared fields use the main Save settings button.
+
+New prompts and prompts saved before this feature default to **Same as main provider**. Here, “main” means the shared **Rewrite API Settings**, including the entire Provider, Base URL, API Key, and Model configuration. Selecting a specific Provider uses only that prompt's API fields, even when its Provider matches the main Provider; empty fields do not fall back to shared values. Switching back to inheritance hides and retains the independent fields and key without using them for requests.
 
 Choose from eight built-in icons or import SVG, PNG, or JPG. Custom icons are copied into private app storage, limited to 1 MiB each and 8 MiB total. Configuration exports carry referenced icons; unavailable or invalid images fall back to a built-in icon.
 
-Post-processing Test connection sends a minimal text request using the current shared fields and displays its result without writing to the editor. Per-prompt overrides take effect when that prompt is executed. Both task types share Retry Settings. Changing configuration while a task is running does not change that task's input or retry parameters.
+The shared Test connection button sends a minimal text request using the current shared fields and follows Retry Settings. Transcription and normal prompt execution also follow those settings. Each prompt execution resolves its API settings once; changing settings while it runs does not change the API, input, additional JSON, or retry parameters for that task.
+
+Selecting an independent Provider reveals a Test connection button inside the prompt editor. It tests the current, unsaved Provider, Base URL, API Key, and Model with fixed minimal instructions and input, ignoring the prompt's title, instructions, and additional JSON. It sends one request with no automatic retries and displays the result without saving or writing to the editor or clipboard. Editing API fields or changing Provider, closing the dialog, or destroying the activity cancels that test. Screen rotation retains the draft and cancels the test without restarting it. The shared connection test likewise does not write to the editor or clipboard.
 
 ### Additional JSON merging
 
@@ -275,13 +327,15 @@ For example, this per-prompt configuration selects `another-model` and removes `
 }
 ```
 
-The shared Model is a default; validation uses the model after merging. Google's final model is used in its request URL. Additional fields must follow the selected provider's API format; deleting a required field can produce a configuration or server error.
+The Model from the selected shared or independent API configuration is a default; validation uses the model after merging. Google's final model is used in its request URL. Additional fields must follow the selected provider's API format; deleting a required field can produce a configuration or server error.
 
-Exports use `schemaVersion: 4`, including the interface `language` tag, post-processing settings, ordered prompts, and custom icons. Imports continue to accept versions 1–3, which default to an empty prompt list. Configurations without a `language` field default to English.
+Exports use `schemaVersion: 6`, with exact `audioOutput.bitrateBps`, the interface `language` tag, post-processing settings, ordered prompts with optional independent API settings, and custom icons. A prompt's `provider` is `null` for inheritance; independent configurations store `provider`, `baseUrl`, and `model`. Imports continue to accept versions 1–5; versions 1–4 have their `bitrateKbps` converted to bits per second. Existing PCM/WAV settings, including unsigned 8-bit output, are retained. Legacy Opus selections of 32/44.1 kHz migrate to 48 kHz, matching their previous encoded output. Versions 1–3 default to an empty prompt list; prompts without a `provider` inherit the main API, and configurations without a `language` field default to English. Invalid encoding combinations are rejected before applying an import.
 
 The clipboard safety copy is enabled by default. Turning it off restores fallback-only behavior: Dictate copies only when current-focus insertion explicitly fails. An unconfirmed insertion is never retried or copied automatically in that mode, because it may still have reached the editor.
 
-Use HTTPS. Audio and selected text go directly to their configured Base URLs. Dictate provides no API, proxy, or account system. The two API Keys are separately encrypted using an AES key held by Android Keystore and omitted from exports by default; importing keys requires explicit confirmation.
+Use HTTPS. Audio and selected text go directly to their configured Base URLs. Dictate provides no API, proxy, or account system. Transcription, shared Rewrite API, and independent prompt API Keys are separately encrypted using an AES key held by Android Keystore and omitted from exports. Prompt keys follow stable prompt IDs through renaming and reordering and are removed when their prompt is deleted.
+
+Importing keys, including a prompt's optional `apiKey`, requires explicit confirmation. When an imported prompt omits `apiKey`, an existing key is retained only if its ID, Provider, and Base URL (after trimming surrounding whitespace) all match; otherwise its key is empty. An explicitly empty `apiKey` clears the stored key.
 
 ## License
 

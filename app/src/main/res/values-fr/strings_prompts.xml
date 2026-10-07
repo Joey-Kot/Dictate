@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="prompt_same_provider">Identique au fournisseur principal</string>
+    <string name="prompt_test_api_help">Teste ces paramètres API une seule fois, sans le contenu du prompt ni le JSON supplémentaire. Aucun enregistrement préalable nécessaire.</string>
     <string name="prompt_provider">Provider</string>
     <string name="prompt_base_url">Base URL</string>
     <string name="prompt_api_key">API Key</string>

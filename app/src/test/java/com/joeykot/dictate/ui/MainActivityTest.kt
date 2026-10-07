@@ -84,6 +84,54 @@ class MainActivityTest {
     }
 
     @Test
+    fun codecSelectionReconcilesRatesContainersAndControlVisibility() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val root = controller.get().window.decorView
+            layout(root)
+            shadowOf(Looper.getMainLooper()).idle()
+            val codecs = spinnerForLabel(root, "编码")
+            val rates = spinnerForLabel(root, "输出采样率")
+            val containers = spinnerForLabel(root, "容器")
+            val bitrate = spinnerForLabel(root, "码率")
+            val depths = spinnerForLabel(root, "位深度")
+            for (codec in listOf(AudioCodec.AMR_WB, AudioCodec.FLAC, AudioCodec.PCM, AudioCodec.OPUS)) {
+                codecs.setSelection(AudioCodec.entries.indexOf(codec))
+                codecs.onItemSelectedListener!!.onItemSelected(codecs, null, codecs.selectedItemPosition, codecs.selectedItemId)
+                shadowOf(Looper.getMainLooper()).idle()
+                assertEquals(AudioConfig.compatibleSampleRates(codec).size, rates.count)
+                assertEquals(AudioConfig.defaultContainer(codec).value.uppercase(), containers.selectedItem)
+                assertEquals(if (codec.usesBitrate) View.VISIBLE else View.GONE, (bitrate.parent as View).visibility)
+                assertEquals(if (AudioConfig.compatibleBitDepths(codec).isNotEmpty()) View.VISIBLE else View.GONE, (depths.parent as View).visibility)
+                if (codec == AudioCodec.AMR_WB) assertTrue((0 until bitrate.count).any { bitrate.getItemAtPosition(it) == "23.85 kbps" })
+            }
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun pcmDepthChangeReconcilesRawContainerWithoutResettingSampleRate() {
+        application.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_CODEC, AudioCodec.PCM.name).putString(KEY_CONTAINER, AudioContainer.S24LE.name)
+            .putInt(KEY_BIT_DEPTH, 24).putInt(KEY_SAMPLE_RATE, 44100).commit()
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val root = controller.get().window.decorView
+            layout(root)
+            shadowOf(Looper.getMainLooper()).idle()
+            val depth = spinnerForLabel(root, "位深度")
+            depth.setSelection(1) // 16 bits
+            depth.onItemSelectedListener!!.onItemSelected(depth, null, 1, depth.selectedItemId)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals("WAV", spinnerForLabel(root, "容器").selectedItem)
+            assertEquals("44.1 kHz", spinnerForLabel(root, "输出采样率").selectedItem)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
     fun saveButtonPersistsThroughBackgroundWriter() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         try {

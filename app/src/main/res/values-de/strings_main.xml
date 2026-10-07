@@ -97,7 +97,7 @@
     <string name="main_scheme_sunset">Sonnenuntergang</string>
     <string name="main_scheme_color_blind">Für Farbsehschwäche geeignet</string>
     <string name="main_scheme_custom">Benutzerdefiniert</string>
-    <string name="main_sample_rate_auto">Wie Aufnahmequelle (bis zu 48 kHz)</string>
+    <string name="main_sample_rate_auto">Automatisch (Eingang und Codec, bis 48 kHz)</string>
     <string name="main_color_picker">Kreisförmige Farbauswahl</string>
     <string name="main_about">Über die App</string>
     <string name="main_about_author">Autor</string>

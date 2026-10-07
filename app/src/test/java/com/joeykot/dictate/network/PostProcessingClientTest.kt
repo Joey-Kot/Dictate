@@ -25,6 +25,77 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [35])
 class PostProcessingClientTest {
     @Test
+    fun independentProvidersUseTheirOwnRouteAuthenticationAndJsonOrStreamParser() {
+        for (provider in PostProcessingProvider.entries) for (streaming in listOf(false, true)) {
+            TestServer().use { server ->
+                val (path, auth) = when (provider) {
+                    PostProcessingProvider.GOOGLE -> "/v1beta/models/independent-model:generateContent" to "x-goog-api-key: prompt-secret"
+                    PostProcessingProvider.ANTHROPIC -> "/v1/messages" to "x-api-key: prompt-secret"
+                    PostProcessingProvider.OPENAI_RESPONSES -> "/v1/responses" to "Authorization: Bearer prompt-secret"
+                    PostProcessingProvider.DEEPSEEK -> "/chat/completions" to "Authorization: Bearer prompt-secret"
+                    PostProcessingProvider.QWEN -> "/compatible-mode/v1/chat/completions" to "Authorization: Bearer prompt-secret"
+                    PostProcessingProvider.GLM -> "/api/paas/v4/chat/completions" to "Authorization: Bearer prompt-secret"
+                    else -> "/v1/chat/completions" to "Authorization: Bearer prompt-secret"
+                }
+                val response = if (streaming) when (provider) {
+                    PostProcessingProvider.GOOGLE -> "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"result\"}]},\"finishReason\":\"STOP\"}]}\n\n"
+                    PostProcessingProvider.ANTHROPIC -> "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"result\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n"
+                    PostProcessingProvider.OPENAI_RESPONSES -> "data: {\"type\":\"response.completed\",\"response\":{\"output_text\":\"result\"}}\n\n"
+                    else -> "data: {\"choices\":[{\"delta\":{\"content\":\"result\"}}]}\n\ndata: [DONE]\n\n"
+                } else when (provider) {
+                    PostProcessingProvider.GOOGLE -> """{"candidates":[{"content":{"parts":[{"text":"result"}]}}]}"""
+                    PostProcessingProvider.ANTHROPIC -> """{"content":[{"type":"text","text":"result"}]}"""
+                    PostProcessingProvider.OPENAI_RESPONSES -> """{"output_text":"result"}"""
+                    else -> """{"choices":[{"message":{"content":"result"}}]}"""
+                }
+                val captured = server.respond(200, response,
+                    contentType = if (streaming) "text/event-stream" else "application/json")
+                val prompt = PromptConfig(provider = provider, baseUrl = server.url, model = "independent-model",
+                    prompt = "Summarize", additionalJson = """{"stream":$streaming,"temperature":0.25}""")
+                val api = prompt.effectiveApi(PostProcessingConfig(baseUrl = "https://main.example", model = "main-model"),
+                    "main-secret", "prompt-secret")
+                val result = newClient().execute(api.config, api.apiKey, prompt, "original text") { true }
+
+                assertTrue("$provider streaming=$streaming: $result", result is TranscriptionClient.Result.Success)
+                assertEquals("result", (result as TranscriptionClient.Result.Success).text)
+                val (headers, payload) = captured.get(3, TimeUnit.SECONDS)
+                assertTrue(headers.startsWith("POST $path "))
+                assertTrue(headers.contains(auth, ignoreCase = true))
+                assertFalse(headers.contains("main-secret"))
+                val body = JSONObject(payload)
+                assertEquals(streaming, body.getBoolean("stream"))
+                assertEquals(0.25, body.getDouble("temperature"), 0.0)
+                if (provider == PostProcessingProvider.GOOGLE) assertFalse(body.has("model"))
+                else assertEquals("independent-model", body.getString("model"))
+            }
+        }
+    }
+
+    @Test
+    fun transcriptionUsesResolvedAudioExtensionAndMimeType() {
+        val context: android.content.Context = RuntimeEnvironment.getApplication()
+        val config = com.joeykot.dictate.model.AudioConfig(codec = com.joeykot.dictate.model.AudioCodec.AMR_WB).normalized()
+        val plan = com.joeykot.dictate.audio.AudioEncodingPlan.resolve(config, com.joeykot.dictate.model.Pcm16Format(48000, 1))
+        val audio = File.createTempFile("network-test-", ".${plan.extension}", context.cacheDir).apply { writeText("test-audio") }
+        try {
+            TestServer().use { server ->
+                val captured = server.respond(200, """{"text":"ok"}""")
+                val result = TranscriptionClient(Diagnostics(context)).transcribe(
+                    2, TranscriptionClient.Request(
+                        endpoint = "${server.url}/v1/audio/transcriptions", apiKey = "key", model = "test",
+                        additionalFields = linkedMapOf(), audioFile = audio, mimeType = plan.mimeType,
+                    ),
+                )
+                assertTrue(result is TranscriptionClient.Result.Success)
+                val body = captured.get(3, TimeUnit.SECONDS).second
+                assertTrue(body.contains(".amr\""))
+                assertTrue(body.contains("Content-Type: audio/amr-wb\r\n"))
+                assertTrue(body.contains("test-audio"))
+            }
+        } finally { audio.delete() }
+    }
+
+    @Test
     fun transcriptionMultipartUsesTheOverriddenModelAndStructuredFields() {
         val context: android.content.Context = RuntimeEnvironment.getApplication()
         val audio = File.createTempFile("network-test-", ".wav", context.cacheDir).apply {

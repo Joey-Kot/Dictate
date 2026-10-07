@@ -63,7 +63,7 @@ class SettingsRepositoryDisplayTest {
 
         assertEquals(expected, repository.get().display)
         val exported = JSONObject(repository.exportJson())
-        assertEquals(4, exported.getInt("schemaVersion"))
+        assertEquals(6, exported.getInt("schemaVersion"))
         assertEquals(0.47, exported.getJSONObject("display").getDouble("buttonOpacity"), 0.0001)
         assertEquals("#123456", exported.getJSONObject("display").getJSONObject("customColors").getString("recording"))
         assertEquals(expected, repository.previewImport(exported.toString()).settings.display)
@@ -91,6 +91,10 @@ class SettingsRepositoryDisplayTest {
         saveInBackground(repository, AppSettings())
         val legacy = JSONObject(repository.exportJson()).apply {
             put("schemaVersion", 1)
+            getJSONObject("audioOutput").apply {
+                put("bitrateKbps", getInt("bitrateBps") / 1000)
+                remove("bitrateBps")
+            }
             remove("display")
         }
 

@@ -97,7 +97,7 @@
     <string name="main_scheme_sunset">日落</string>
     <string name="main_scheme_color_blind">色盲友好</string>
     <string name="main_scheme_custom">自定义</string>
-    <string name="main_sample_rate_auto">跟随录音输入（最高 48 kHz）</string>
+    <string name="main_sample_rate_auto">自动适配录音输入与编码（最高 48 kHz）</string>
     <string name="main_color_picker">圆形调色盘</string>
     <string name="main_about">关于</string>
     <string name="main_about_author">作者</string>

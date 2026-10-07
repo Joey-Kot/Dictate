@@ -4,124 +4,6 @@ import com.joeykot.dictate.R
 import com.joeykot.dictate.i18n.AppStrings
 import kotlin.math.pow
 
-enum class AudioCodec(val value: String) {
-    OPUS("opus"),
-    MP3("mp3"),
-    AAC("aac"),
-    PCM("pcm"),
-}
-
-enum class AudioContainer(val value: String, val extension: String, val mimeType: String) {
-    OPUS("opus", "opus", "audio/opus"),
-    OGG("ogg", "ogg", "audio/ogg"),
-    MP3("mp3", "mp3", "audio/mpeg"),
-    M4A("m4a", "m4a", "audio/mp4"),
-    WAV("wav", "wav", "audio/wav"),
-}
-
-data class AudioConfig(
-    val bitDepth: Int = DEFAULT_BIT_DEPTH,
-    val sampleRate: Int = DEFAULT_SAMPLE_RATE,
-    val codec: AudioCodec = AudioCodec.MP3,
-    val container: AudioContainer = AudioContainer.MP3,
-    val bitrateKbps: Int = DEFAULT_BITRATE_KBPS,
-) {
-    fun normalized(): AudioConfig {
-        val normalizedSampleRate = sampleRate.takeIf { it in SAMPLE_RATES } ?: DEFAULT_SAMPLE_RATE
-        return normalizedForSampleRate(normalizedSampleRate)
-    }
-
-    /**
-     * Resolves the automatic output sample-rate setting for one PCM capture.
-     *
-     * Capture remains at the route-selected rate. The encoded output is capped at 48 kHz, which
-     * is both the highest selectable output rate and the useful ceiling for the supported codecs.
-     */
-    fun resolvedForInput(inputSampleRateHz: Int): AudioConfig {
-        require(inputSampleRateHz > 0) { AppStrings.get(R.string.settings_input_sample_rate, "Input sample rate must be positive") }
-        val resolvedSampleRate = if (sampleRate == AUTO_SAMPLE_RATE) {
-            inputSampleRateHz.coerceAtMost(MAX_AUTO_OUTPUT_SAMPLE_RATE)
-        } else {
-            sampleRate
-        }
-        return normalizedForSampleRate(resolvedSampleRate)
-    }
-
-    private fun normalizedForSampleRate(normalizedSampleRate: Int): AudioConfig {
-        val compatible = compatibleContainers(codec)
-        val bitrates = compatibleBitrates(codec, normalizedSampleRate)
-        return copy(
-            sampleRate = normalizedSampleRate,
-            container = container.takeIf { it in compatible } ?: defaultContainer(codec),
-            bitrateKbps = if (codec == AudioCodec.PCM) {
-                DEFAULT_BITRATE_KBPS
-            } else {
-                bitrateKbps.takeIf { it in bitrates } ?: defaultBitrate(codec, normalizedSampleRate)
-            },
-        )
-    }
-
-    fun validate(): List<String> = buildList {
-        if (bitDepth !in BIT_DEPTHS) add(AppStrings.get(R.string.settings_bit_depth, "Bit depth must be one of: %1\$s bits", BIT_DEPTHS.joinToString()))
-        if (sampleRate !in SAMPLE_RATES) add(AppStrings.get(R.string.settings_sample_rate_unsupported, "Unsupported sample rate"))
-        if (codec != AudioCodec.PCM && bitrateKbps !in compatibleBitrates(codec, sampleRate)) {
-            add(AppStrings.get(R.string.settings_codec_bitrate, "The %1\$s codec does not support this bitrate at the selected sample rate", codec.value))
-        }
-        if (container !in compatibleContainers(codec)) {
-            add(AppStrings.get(R.string.settings_codec_container, "The %1\$s codec cannot use the %2\$s container", codec.value, container.value))
-        }
-    }
-
-    companion object {
-        /** Select an output rate that follows the PCM capture's client-side sample rate. */
-        const val AUTO_SAMPLE_RATE = 0
-        const val DEFAULT_BIT_DEPTH = 16
-        const val DEFAULT_SAMPLE_RATE = AUTO_SAMPLE_RATE
-        const val DEFAULT_BITRATE_KBPS = 128
-        const val MAX_AUTO_OUTPUT_SAMPLE_RATE = 48_000
-
-        val BIT_DEPTHS = listOf(8, 16, 24, 32)
-        val SAMPLE_RATES = listOf(AUTO_SAMPLE_RATE, 8_000, 16_000, 24_000, 32_000, 44_100, 48_000)
-        val BITRATES_KBPS = listOf(16, 32, 64, 128, 192, 256, 320)
-
-        fun compatibleContainers(codec: AudioCodec): List<AudioContainer> = when (codec) {
-            AudioCodec.OPUS -> listOf(AudioContainer.OPUS, AudioContainer.OGG)
-            AudioCodec.MP3 -> listOf(AudioContainer.MP3)
-            AudioCodec.AAC -> listOf(AudioContainer.M4A)
-            AudioCodec.PCM -> listOf(AudioContainer.WAV)
-        }
-
-        fun compatibleBitrates(codec: AudioCodec, sampleRate: Int): List<Int> {
-            // The UI needs a provisional list before a route is active. Use the 48 kHz choices;
-            // resolvedForInput() will normalize an incompatible choice for a lower-rate route.
-            val effectiveSampleRate = if (sampleRate == AUTO_SAMPLE_RATE) {
-                MAX_AUTO_OUTPUT_SAMPLE_RATE
-            } else {
-                sampleRate
-            }
-            return when (codec) {
-                AudioCodec.OPUS -> BITRATES_KBPS.filter { it <= 256 }
-                AudioCodec.MP3 -> when {
-                    effectiveSampleRate <= 8_000 -> BITRATES_KBPS.filter { it <= 64 }
-                    effectiveSampleRate <= 24_000 -> BITRATES_KBPS.filter { it <= 128 }
-                    else -> BITRATES_KBPS.filter { it >= 32 }
-                }
-                AudioCodec.AAC -> BITRATES_KBPS.filter { it * 1_000 <= effectiveSampleRate * 6 }
-                AudioCodec.PCM -> emptyList()
-            }
-        }
-
-        fun defaultBitrate(codec: AudioCodec, sampleRate: Int): Int {
-            val available = compatibleBitrates(codec, sampleRate)
-            return DEFAULT_BITRATE_KBPS.takeIf { it in available }
-                ?: available.lastOrNull()
-                ?: DEFAULT_BITRATE_KBPS
-        }
-
-        fun defaultContainer(codec: AudioCodec): AudioContainer = compatibleContainers(codec).first()
-    }
-}
-
 data class ProviderConfig(
     val baseUrl: String = "",
     val model: String = "",
@@ -270,6 +152,7 @@ data class RuntimeSettings(
     val app: AppSettings,
     val apiKey: String,
     val postProcessingApiKey: String = "",
+    val promptApiKeys: Map<String, String> = emptyMap(),
 )
 
 enum class JobState {

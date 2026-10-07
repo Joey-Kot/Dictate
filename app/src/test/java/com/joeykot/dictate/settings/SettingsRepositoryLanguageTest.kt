@@ -79,6 +79,10 @@ class SettingsRepositoryLanguageTest {
             background { repository.save(AppSettings(language = AppLanguage.RUSSIAN), "") }
             val legacy = JSONObject(repository.exportJson()).apply {
                 put("schemaVersion", schemaVersion)
+                getJSONObject("audioOutput").apply {
+                    put("bitrateKbps", getInt("bitrateBps") / 1000)
+                    remove("bitrateBps")
+                }
                 remove("language")
                 if (schemaVersion < 4) {
                     remove("postProcessing")

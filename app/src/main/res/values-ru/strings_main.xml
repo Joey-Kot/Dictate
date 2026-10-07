@@ -97,7 +97,7 @@
     <string name="main_scheme_sunset">Закат</string>
     <string name="main_scheme_color_blind">Для нарушений цветового зрения</string>
     <string name="main_scheme_custom">Своя схема</string>
-    <string name="main_sample_rate_auto">Как у записи (до 48 кГц)</string>
+    <string name="main_sample_rate_auto">Автоматически (запись и кодек, до 48 кГц)</string>
     <string name="main_color_picker">Круговая палитра цветов</string>
     <string name="main_about">О приложении</string>
     <string name="main_about_author">Автор</string>

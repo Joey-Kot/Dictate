@@ -62,10 +62,13 @@ class SettingsRepository(context: Context) {
             language = AppLocale.readLanguage(applicationContext),
             audio = AudioConfig(
                 bitDepth = preferences.getInt(KEY_BIT_DEPTH, AudioConfig.DEFAULT_BIT_DEPTH),
-                sampleRate = sampleRate,
+                sampleRate = if (!preferences.contains(KEY_BITRATE_BPS)) legacyOutputRate(codec, sampleRate) else sampleRate,
                 codec = codec,
                 container = container,
-                bitrateKbps = preferences.getInt(KEY_BITRATE, AudioConfig.DEFAULT_BITRATE_KBPS),
+                bitrateBps = preferences.getInt(
+                    KEY_BITRATE_BPS,
+                    preferences.getInt(KEY_BITRATE, AudioConfig.DEFAULT_BITRATE_KBPS) * 1000,
+                ),
             ).normalized(),
             provider = ProviderConfig(
                 baseUrl = preferences.getString(KEY_BASE_URL, "").orEmpty(),
@@ -130,11 +133,18 @@ class SettingsRepository(context: Context) {
     }
 
     @Synchronized
-    fun runtime(): RuntimeSettings = RuntimeSettings(
-        get(),
-        secureApiKeyStore.get(),
-        secureApiKeyStore.getPostProcessing(),
-    )
+    fun runtime(): RuntimeSettings {
+        val settings = get()
+        return RuntimeSettings(
+            settings,
+            secureApiKeyStore.get(),
+            secureApiKeyStore.getPostProcessing(),
+            settings.postProcessing.prompts.filter { it.provider != null }.associate { it.id to secureApiKeyStore.getPrompt(it.id) },
+        )
+    }
+
+    @Synchronized
+    fun promptApiKey(id: String): String = secureApiKeyStore.getPrompt(id)
 
     @SuppressLint("ApplySharedPref")
     @Synchronized
@@ -142,6 +152,7 @@ class SettingsRepository(context: Context) {
         settings: AppSettings,
         apiKey: String,
         postProcessingApiKey: String = secureApiKeyStore.getPostProcessing(),
+        promptApiKeys: Map<String, String> = emptyMap(),
     ) {
         check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
         val errors = validate(settings)
@@ -159,7 +170,7 @@ class SettingsRepository(context: Context) {
             .putBoolean(KEY_SAMPLE_RATE_SELECTION_IS_CURRENT, true)
             .putString(KEY_CODEC, normalized.audio.codec.name)
             .putString(KEY_CONTAINER, normalized.audio.container.name)
-            .putInt(KEY_BITRATE, normalized.audio.bitrateKbps)
+            .putInt(KEY_BITRATE_BPS, normalized.audio.bitrateBps)
             .putString(KEY_BASE_URL, normalized.provider.baseUrl.trim())
             .putString(KEY_MODEL, normalized.provider.model.trim())
             .putString(KEY_ADDITIONAL_JSON, normalized.provider.additionalJson.trim())
@@ -184,7 +195,8 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_CUSTOM_PROCESSING_COLOR, normalized.display.customPalette.processingColor)
         secureApiKeyStore.stage(editor, apiKey.trim())
         secureApiKeyStore.stagePostProcessing(editor, postProcessingApiKey.trim())
-        // The settings and both encrypted API Keys become durable as one transaction.
+        secureApiKeyStore.stagePrompts(editor, normalized.postProcessing.prompts.map { it.id }.toSet(), promptApiKeys)
+        // Configuration and encrypted API keys become durable as one transaction.
         check(editor.commit()) { AppStrings.get(R.string.settings_write_failed, "Failed to save settings") }
         AppStrings.refresh(applicationContext)
         secureApiKeyStore.clearLegacyValue()
@@ -194,14 +206,15 @@ class SettingsRepository(context: Context) {
     /** Prompt editing is independent of unsaved or incomplete public provider configuration. */
     @SuppressLint("ApplySharedPref")
     @Synchronized
-    fun savePrompts(prompts: List<PromptConfig>) {
+    fun savePrompts(prompts: List<PromptConfig>, apiKeyUpdates: Map<String, String> = emptyMap()) {
         check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
         val errors = PostProcessingSettingsCodec.validatePrompts(prompts)
         require(errors.isEmpty()) { errors.joinToString("；") }
         val previousIconNames = storedIconNames()
-        check(preferences.edit()
+        val editor = preferences.edit()
             .putString(KEY_PROMPTS, PostProcessingSettingsCodec.encodePrompts(prompts).toString())
-            .commit()) { AppStrings.get(R.string.settings_prompt_save_failed, "Failed to save prompts") }
+        secureApiKeyStore.stagePrompts(editor, prompts.map { it.id }.toSet(), apiKeyUpdates)
+        check(editor.commit()) { AppStrings.get(R.string.settings_prompt_save_failed, "Failed to save prompts") }
         removeReplacedIcons(previousIconNames, prompts)
     }
 
@@ -246,7 +259,7 @@ class SettingsRepository(context: Context) {
     fun exportJson(): String {
         val settings = get()
         val root = JSONObject()
-        root.put("schemaVersion", 4)
+        root.put("schemaVersion", 6)
         root.put("language", settings.language.tag)
         root.put(
             "audioOutput",
@@ -256,7 +269,7 @@ class SettingsRepository(context: Context) {
                 .put("sampleRate", settings.audio.sampleRate)
                 .put("codec", settings.audio.codec.value)
                 .put("container", settings.audio.container.value)
-                .put("bitrateKbps", settings.audio.bitrateKbps),
+                .put("bitrateBps", settings.audio.bitrateBps),
         )
         val additional = if (settings.provider.additionalJson.isBlank()) {
             JSONObject()
@@ -362,6 +375,13 @@ class SettingsRepository(context: Context) {
         } else {
             null
         }
+        val importedPromptKeys = buildMap {
+            val prompts = postProcessingObject?.getJSONArray("prompts")
+            postProcessing.prompts.forEachIndexed { index, prompt ->
+                val item = prompts!!.getJSONObject(index)
+                if (item.has("apiKey")) put(prompt.id, requiredString(item, "apiKey", "postProcessing.prompts[$index].apiKey"))
+            }
+        }
         val iconAssetsObject = if (schemaVersion >= 4 && root.has("promptIconAssets")) {
             requiredObject(root, "promptIconAssets", "promptIconAssets")
         } else {
@@ -381,10 +401,21 @@ class SettingsRepository(context: Context) {
             },
             audio = AudioConfig(
                 bitDepth = requiredInt(audioObject, "bitDepth", "audioOutput.bitDepth"),
-                sampleRate = requiredInt(audioObject, "sampleRate", "audioOutput.sampleRate"),
+                sampleRate = requiredInt(audioObject, "sampleRate", "audioOutput.sampleRate").let {
+                    if (schemaVersion < 5) legacyOutputRate(codec, it) else it
+                },
                 codec = codec,
                 container = container,
-                bitrateKbps = requiredInt(audioObject, "bitrateKbps", "audioOutput.bitrateKbps"),
+                bitrateBps = if (schemaVersion >= 5) {
+                    requiredInt(audioObject, "bitrateBps", "audioOutput.bitrateBps")
+                } else {
+                    requiredInt(audioObject, "bitrateKbps", "audioOutput.bitrateKbps").let {
+                        require(it in 1..(Int.MAX_VALUE / 1000)) {
+                            AppStrings.get(R.string.settings_codec_bitrate, "The %1\$s codec does not support this bitrate at the selected sample rate", codec.value)
+                        }
+                        it * 1000
+                    }
+                },
             ),
             provider = ProviderConfig(
                 baseUrl = requiredString(providerObject, "baseUrl", "openAICompatible.baseUrl"),
@@ -417,7 +448,7 @@ class SettingsRepository(context: Context) {
         val errors = validate(imported)
         if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("；"))
 
-        return ImportPreview(imported, importedApiKey, importedPostProcessingApiKey, iconAssets)
+        return ImportPreview(imported, importedApiKey, importedPostProcessingApiKey, iconAssets, importedPromptKeys)
     }
 
     @Synchronized
@@ -428,6 +459,14 @@ class SettingsRepository(context: Context) {
         }
         val errors = validate(preview.settings)
         require(errors.isEmpty()) { errors.joinToString("；") }
+        val currentPrompts = get().postProcessing.prompts.associateBy { it.id }
+        val promptKeys = preview.settings.postProcessing.prompts.associate { prompt ->
+            val previous = currentPrompts[prompt.id]
+            val key = preview.promptApiKeys[prompt.id] ?: if (
+                previous != null && previous.provider == prompt.provider && previous.baseUrl.trim() == prompt.baseUrl.trim()
+            ) secureApiKeyStore.getPrompt(prompt.id) else ""
+            prompt.id to key
+        }
         val installedIcons = PromptIconAssets.write(iconDirectory, preview.iconAssets)
         val importedSettings = preview.settings.copy(postProcessing = preview.settings.postProcessing.copy(
             prompts = preview.settings.postProcessing.prompts.map { prompt ->
@@ -440,6 +479,7 @@ class SettingsRepository(context: Context) {
                 importedSettings,
                 preview.apiKey ?: secureApiKeyStore.get(),
                 preview.postProcessingApiKey ?: secureApiKeyStore.getPostProcessing(),
+                promptKeys,
             )
         } catch (error: Exception) {
             installedIcons.values.forEach { File(iconDirectory, it).delete() }
@@ -553,6 +593,10 @@ class SettingsRepository(context: Context) {
         return value
     }
 
+    // Old Opus settings offered 32/44.1 kHz but always encoded those selections at 48 kHz.
+    private fun legacyOutputRate(codec: AudioCodec, rate: Int): Int =
+        if (codec == AudioCodec.OPUS && rate in listOf(32_000, 44_100)) 48_000 else rate
+
     private inline fun <reified T : Enum<T>> enumValueOrDefault(value: String?, default: T): T =
         value?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: default
 
@@ -561,8 +605,9 @@ class SettingsRepository(context: Context) {
         val apiKey: String?,
         val postProcessingApiKey: String? = null,
         val iconAssets: Map<String, ByteArray> = emptyMap(),
+        val promptApiKeys: Map<String, String> = emptyMap(),
     ) {
-        val hasApiKeys: Boolean get() = apiKey != null || postProcessingApiKey != null
+        val hasApiKeys: Boolean get() = apiKey != null || postProcessingApiKey != null || promptApiKeys.isNotEmpty()
     }
 
     data class OverlayPosition(
@@ -578,6 +623,7 @@ class SettingsRepository(context: Context) {
         const val KEY_CODEC = "audio.codec"
         const val KEY_CONTAINER = "audio.container"
         const val KEY_BITRATE = "audio.bitrate"
+        const val KEY_BITRATE_BPS = "audio.bitrateBps"
         const val KEY_BASE_URL = "provider.base_url"
         const val KEY_MODEL = "provider.model"
         const val KEY_ADDITIONAL_JSON = "provider.additional_json"
@@ -600,7 +646,7 @@ class SettingsRepository(context: Context) {
         const val KEY_OVERLAY_X = "overlay.x"
         const val KEY_OVERLAY_Y = "overlay.y"
         const val LEGACY_DEFAULT_SAMPLE_RATE = 16_000
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4)
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4, 5, 6)
         val RGB_HEX = Regex("#[0-9A-Fa-f]{6}")
     }
 }

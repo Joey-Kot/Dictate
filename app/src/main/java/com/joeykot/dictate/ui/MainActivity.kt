@@ -78,6 +78,9 @@ class MainActivity : Activity() {
     private lateinit var bitrateSpinner: Spinner
     private lateinit var bitDepthRow: LinearLayout
     private lateinit var bitrateRow: LinearLayout
+    private var displayedSampleRates: List<Int> = AudioConfig.SAMPLE_RATES
+    private var displayedBitDepths: List<Int> = AudioConfig.BIT_DEPTHS
+    private var linkingAudio = false
     private var displayedContainers: List<AudioContainer> = emptyList()
     private var displayedBitrates: List<Int> = emptyList()
 
@@ -256,6 +259,10 @@ class MainActivity : Activity() {
                     callback,
                 )
             },
+            testPromptConnection = { prompt, apiKey, callback ->
+                app.voiceJobController.testPromptConnection(settingsRepository.runtime(), prompt, apiKey, callback)
+            },
+            cancelPromptTest = app.voiceJobController::cancelPromptConnectionTest,
         )
         root.addView(postProcessingSection)
         root.addView(sectionTitle(getString(R.string.main_retry_section)))
@@ -401,11 +408,11 @@ class MainActivity : Activity() {
 
         codecSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (!loadingForm) {
+                if (!loadingForm && !linkingAudio) {
                     // The initial callback can arrive after form loading, so preserve compatible choices.
                     updateAudioLinkage(
                         codec = AudioCodec.entries[position],
-                        sampleRate = AudioConfig.SAMPLE_RATES[sampleRateSpinner.selectedItemPosition],
+                        sampleRate = displayedSampleRates.getOrElse(sampleRateSpinner.selectedItemPosition) { AudioConfig.AUTO_SAMPLE_RATE },
                         desiredContainer = displayedContainers.getOrNull(
                             containerSpinner.selectedItemPosition,
                         ),
@@ -419,16 +426,29 @@ class MainActivity : Activity() {
 
         sampleRateSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (!loadingForm) {
+                if (!loadingForm && !linkingAudio) {
                     updateAudioLinkage(
                         codec = AudioCodec.entries[codecSpinner.selectedItemPosition],
-                        sampleRate = AudioConfig.SAMPLE_RATES[position],
+                        sampleRate = displayedSampleRates.getOrElse(position) { AudioConfig.AUTO_SAMPLE_RATE },
                         desiredContainer = displayedContainers.getOrNull(containerSpinner.selectedItemPosition),
                         desiredBitrate = displayedBitrates.getOrNull(bitrateSpinner.selectedItemPosition),
                     )
                 }
             }
 
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        bitDepthSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (!loadingForm && !linkingAudio) {
+                    updateAudioLinkage(
+                        AudioCodec.entries[codecSpinner.selectedItemPosition],
+                        displayedSampleRates.getOrElse(sampleRateSpinner.selectedItemPosition) { AudioConfig.AUTO_SAMPLE_RATE },
+                        displayedContainers.getOrNull(containerSpinner.selectedItemPosition),
+                        displayedBitrates.getOrNull(bitrateSpinner.selectedItemPosition),
+                    )
+                }
+            }
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
     }
@@ -612,14 +632,13 @@ class MainActivity : Activity() {
         val settings = settingsRepository.get()
         loadingForm = true
         languageSpinner.setSelection(AppLanguage.entries.indexOf(settings.language).coerceAtLeast(0))
-        bitDepthSpinner.setSelection(AudioConfig.BIT_DEPTHS.indexOf(settings.audio.bitDepth).coerceAtLeast(0))
-        sampleRateSpinner.setSelection(AudioConfig.SAMPLE_RATES.indexOf(settings.audio.sampleRate).coerceAtLeast(0))
         codecSpinner.setSelection(AudioCodec.entries.indexOf(settings.audio.codec).coerceAtLeast(0))
         updateAudioLinkage(
             settings.audio.codec,
             settings.audio.sampleRate,
             settings.audio.container,
-            settings.audio.bitrateKbps,
+            settings.audio.bitrateBps,
+            settings.audio.bitDepth,
         )
         baseUrlInput.setText(settings.provider.baseUrl)
         apiKeyInput.setText(settingsRepository.runtime().apiKey)
@@ -649,12 +668,12 @@ class MainActivity : Activity() {
         val settings = AppSettings(
             language = AppLanguage.entries.getOrElse(languageSpinner.selectedItemPosition) { AppLanguage.ENGLISH },
             audio = AudioConfig(
-                bitDepth = AudioConfig.BIT_DEPTHS[bitDepthSpinner.selectedItemPosition],
-                sampleRate = AudioConfig.SAMPLE_RATES[sampleRateSpinner.selectedItemPosition],
+                bitDepth = displayedBitDepths.getOrElse(bitDepthSpinner.selectedItemPosition) { AudioConfig.DEFAULT_BIT_DEPTH },
+                sampleRate = displayedSampleRates.getOrElse(sampleRateSpinner.selectedItemPosition) { AudioConfig.AUTO_SAMPLE_RATE },
                 codec = codec,
                 container = container,
-                bitrateKbps = displayedBitrates.getOrNull(bitrateSpinner.selectedItemPosition)
-                    ?: AudioConfig.DEFAULT_BITRATE_KBPS,
+                bitrateBps = displayedBitrates.getOrNull(bitrateSpinner.selectedItemPosition)
+                    ?: AudioConfig.DEFAULT_BITRATE_BPS,
             ),
             provider = ProviderConfig(
                 baseUrl = baseUrlInput.text.toString().trim(),
@@ -700,7 +719,10 @@ class MainActivity : Activity() {
         }
         return enqueueSettingsWrite(
             operation = {
-                settingsRepository.save(runtime.app, runtime.apiKey, runtime.postProcessingApiKey)
+                val settings = runtime.app.copy(postProcessing = runtime.app.postProcessing.copy(
+                    prompts = settingsRepository.get().postProcessing.prompts,
+                ))
+                settingsRepository.save(settings, runtime.apiKey, runtime.postProcessingApiKey)
             },
             onSuccess = {
                 app.voiceJobController.refreshLanguage()
@@ -777,28 +799,47 @@ class MainActivity : Activity() {
         sampleRate: Int,
         desiredContainer: AudioContainer?,
         desiredBitrate: Int?,
+        desiredDepth: Int = displayedBitDepths.getOrElse(bitDepthSpinner.selectedItemPosition) { AudioConfig.DEFAULT_BIT_DEPTH },
     ) {
-        displayedContainers = AudioConfig.compatibleContainers(codec)
-        containerSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            displayedContainers.map { it.value.uppercase() },
-        )
-        val selected = desiredContainer?.takeIf { it in displayedContainers }
-            ?: AudioConfig.defaultContainer(codec)
-        containerSpinner.setSelection(displayedContainers.indexOf(selected).coerceAtLeast(0))
-
-        displayedBitrates = AudioConfig.compatibleBitrates(codec, sampleRate)
-        bitrateSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            displayedBitrates.map { "$it kbps" },
-        )
-        val selectedBitrate = desiredBitrate?.takeIf { it in displayedBitrates }
-            ?: AudioConfig.defaultBitrate(codec, sampleRate)
-        bitrateSpinner.setSelection(displayedBitrates.indexOf(selectedBitrate).coerceAtLeast(0))
-        bitDepthRow.visibility = if (codec == AudioCodec.PCM) View.VISIBLE else View.GONE
-        bitrateRow.visibility = if (codec == AudioCodec.PCM) View.GONE else View.VISIBLE
+        if (linkingAudio) return
+        linkingAudio = true
+        try {
+            val config = AudioConfig(
+                codec = codec, sampleRate = sampleRate, bitDepth = desiredDepth,
+                container = desiredContainer ?: AudioConfig.defaultContainer(codec),
+                bitrateBps = desiredBitrate ?: AudioConfig.DEFAULT_BITRATE_BPS,
+            ).normalized()
+            val rates = AudioConfig.compatibleSampleRates(codec)
+            if (rates != displayedSampleRates) {
+                displayedSampleRates = rates
+                sampleRateSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, rates.map(::formatSampleRate))
+            }
+            sampleRateSpinner.setSelection(displayedSampleRates.indexOf(config.sampleRate).coerceAtLeast(0))
+            val depths = AudioConfig.compatibleBitDepths(codec).ifEmpty { AudioConfig.BIT_DEPTHS }
+            if (depths != displayedBitDepths) {
+                displayedBitDepths = depths
+                bitDepthSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, depths.map { getString(R.string.main_bit_depth_value, it) })
+            }
+            bitDepthSpinner.setSelection(displayedBitDepths.indexOf(config.bitDepth).coerceAtLeast(0))
+            val containers = AudioConfig.compatibleContainers(codec, config.sampleRate, config.bitDepth)
+            if (containers != displayedContainers) {
+                displayedContainers = containers
+                containerSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, containers.map { it.value.uppercase() })
+            }
+            containerSpinner.setSelection(displayedContainers.indexOf(config.container).coerceAtLeast(0))
+            val bitrates = AudioConfig.compatibleBitrates(codec, config.sampleRate)
+            if (bitrates != displayedBitrates) {
+                displayedBitrates = bitrates
+                bitrateSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, bitrates.map {
+                    java.math.BigDecimal(it).movePointLeft(3).stripTrailingZeros().toPlainString() + " kbps"
+                })
+            }
+            bitrateSpinner.setSelection(displayedBitrates.indexOf(config.bitrateBps).coerceAtLeast(0))
+            bitDepthRow.visibility = if (AudioConfig.compatibleBitDepths(codec).isNotEmpty()) View.VISIBLE else View.GONE
+            bitrateRow.visibility = if (codec.usesBitrate) View.VISIBLE else View.GONE
+        } finally {
+            linkingAudio = false
+        }
     }
 
     private fun refreshPermissionStatus() {
@@ -1206,17 +1247,11 @@ class MainActivity : Activity() {
         setSingleLine(true)
     }
 
-    private fun codecLabel(codec: AudioCodec): String = when (codec) {
-        AudioCodec.OPUS -> "Opus"
-        AudioCodec.MP3 -> "MP3"
-        AudioCodec.AAC -> "AAC"
-        AudioCodec.PCM -> "PCM"
-    }
+    private fun codecLabel(codec: AudioCodec): String = codec.label
 
     private fun formatSampleRate(value: Int): String = when (value) {
         AudioConfig.AUTO_SAMPLE_RATE -> getString(R.string.main_sample_rate_auto)
-        44_100 -> "44.1 kHz"
-        else -> "${value / 1_000} kHz"
+        else -> java.math.BigDecimal(value).movePointLeft(3).stripTrailingZeros().toPlainString() + " kHz"
     }
 
     private fun toast(message: String) {

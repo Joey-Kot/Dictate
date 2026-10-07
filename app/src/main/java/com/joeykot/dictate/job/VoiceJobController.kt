@@ -9,6 +9,7 @@ import android.widget.Toast
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.accessibility.TextDelivery
 import com.joeykot.dictate.accessibility.DictateAccessibilityService
+import com.joeykot.dictate.audio.AudioEncodingPlan
 import com.joeykot.dictate.audio.AudioTranscoder
 import com.joeykot.dictate.audio.RecordingService
 import com.joeykot.dictate.R
@@ -18,6 +19,7 @@ import com.joeykot.dictate.model.JobUiState
 import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.model.RuntimeSettings
 import com.joeykot.dictate.model.PromptConfig
+import com.joeykot.dictate.model.ResolvedPostProcessingApi
 import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
 import com.joeykot.dictate.network.TranscriptionClient
@@ -58,6 +60,7 @@ class VoiceJobController(
         CONNECTION_TEST(connectionTest = true),
         POST_PROCESSING(postProcessing = true),
         POST_PROCESSING_TEST(postProcessing = true, connectionTest = true),
+        PROMPT_CONNECTION_TEST(postProcessing = true, connectionTest = true),
     }
 
     private data class ActiveJob(
@@ -67,6 +70,7 @@ class VoiceJobController(
         var runtimeSettings: RuntimeSettings?,
         var rawFormat: Pcm16Format? = null,
         var outputFile: File? = null,
+        var encodingPlan: AudioEncodingPlan? = null,
         var recordingClosed: Boolean = false,
         var retryCount: Int = 0,
         var workerFuture: Future<*>? = null,
@@ -74,6 +78,7 @@ class VoiceJobController(
         val testCallback: ((ConnectionTestResult) -> Unit)? = null,
         val inputText: String = "",
         val prompt: PromptConfig? = null,
+        val postProcessingApi: ResolvedPostProcessingApi? = null,
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -284,13 +289,44 @@ class VoiceJobController(
         )
     }
 
+    fun testPromptConnection(
+        runtime: RuntimeSettings,
+        prompt: PromptConfig,
+        apiKey: String,
+        callback: (ConnectionTestResult) -> Unit,
+    ): Long? {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (uiState.state != JobState.IDLE || activeJob != null) {
+            callback(ConnectionTestResult(false, message = AppStrings.get(R.string.runtime_busy, "A task is already running")))
+            return null
+        }
+        val probe = PromptConfig(
+            id = prompt.id,
+            title = AppStrings.get(R.string.runtime_test_connection, "Test connection"),
+            prompt = "Reply briefly with OK.",
+            provider = prompt.provider,
+            baseUrl = prompt.baseUrl,
+            model = prompt.model,
+        )
+        val accepted = beginPostProcessing(
+            runtime.copy(promptApiKeys = mapOf(prompt.id to apiKey)), probe, "Connection test.", callback, promptTest = true,
+        )
+        return if (accepted) activeJob?.id else null
+    }
+
+    fun cancelPromptConnectionTest(jobId: Long) {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (activeJob?.let { it.id == jobId && it.mode == JobMode.PROMPT_CONNECTION_TEST } == true) cancelActiveJob()
+    }
+
     private fun beginPostProcessing(
         runtime: RuntimeSettings,
         prompt: PromptConfig,
         input: String,
         callback: ((ConnectionTestResult) -> Unit)?,
+        promptTest: Boolean = false,
     ): Boolean {
-        val retryError = runtime.app.retry.validate().firstOrNull()
+        val retryError = if (promptTest) null else runtime.app.retry.validate().firstOrNull()
         if (retryError != null) {
             if (callback != null) callback(ConnectionTestResult(false, message = retryError))
             else showToast(retryError)
@@ -299,10 +335,17 @@ class VoiceJobController(
         val jobId = nextJobId.incrementAndGet()
         activeJob = ActiveJob(
             id = jobId,
-            mode = if (callback == null) JobMode.POST_PROCESSING else JobMode.POST_PROCESSING_TEST,
+            mode = when {
+                promptTest -> JobMode.PROMPT_CONNECTION_TEST
+                callback == null -> JobMode.POST_PROCESSING
+                else -> JobMode.POST_PROCESSING_TEST
+            },
             runtimeSettings = runtime,
             inputText = input,
             prompt = prompt,
+            postProcessingApi = prompt.effectiveApi(
+                runtime.app.postProcessing, runtime.postProcessingApiKey, runtime.promptApiKeys[prompt.id].orEmpty(),
+            ),
             testCallback = callback,
         )
         startRequest(jobId)
@@ -521,15 +564,17 @@ class VoiceJobController(
             return
         }
 
-        val audio = runtime.app.audio.normalized()
-        val output = fileStore.newEncodedFile(jobId, audio.container)
+        val plan = AudioEncodingPlan.resolve(runtime.app.audio, rawFormat)
+        job.encodingPlan = plan
+        diagnostics.info("ffmpeg", "job=$jobId requested=${runtime.app.audio} resolved=${plan.config} layout=${plan.layout.name}")
+        val output = fileStore.newEncodedFile(jobId, plan.config.container)
         job.outputFile = output
         updateUi(jobId, JobState.TRANSCODING) {
-            AppStrings.get(R.string.runtime_transcoding_to, "Transcoding to %1\$s", audio.container.value.uppercase())
+            AppStrings.get(R.string.runtime_transcoding_to, "Transcoding to %1\$s", plan.config.container.value.uppercase())
         }
         job.workerFuture = worker.submit {
             if (!isCurrent(jobId)) return@submit
-            val result = transcoder.transcode(jobId, rawFile, rawFormat, output, audio)
+            val result = transcoder.transcode(jobId, rawFile, rawFormat, output, plan)
             mainHandler.post {
                 if (!isCurrent(jobId)) return@post
                 when (result) {
@@ -556,7 +601,7 @@ class VoiceJobController(
                 model = runtime.app.provider.model.trim(),
                 additionalFields = AdditionalParameters.parse(runtime.app.provider.additionalJson),
                 audioFile = output,
-                mimeType = runtime.app.audio.normalized().container.mimeType,
+                mimeType = requireNotNull(job.encodingPlan).mimeType,
                 additionalJson = runtime.app.provider.additionalJson,
             )
         } catch (error: IllegalArgumentException) {
@@ -600,8 +645,8 @@ class VoiceJobController(
         job.workerFuture = worker.submit {
             if (!isCurrent(job.id)) return@submit
             val result = postProcessingClient.execute(
-                config = runtime.app.postProcessing,
-                apiKey = runtime.postProcessingApiKey,
+                config = requireNotNull(job.postProcessingApi).config,
+                apiKey = job.postProcessingApi.apiKey,
                 prompt = prompt,
                 input = job.inputText,
                 shouldContinue = { isCurrent(job.id) },
@@ -626,7 +671,7 @@ class VoiceJobController(
                             elapsedMillis = result.elapsedMillis,
                             text = diagnostics.sanitize(
                                 result.text,
-                                secrets = listOf(runtime.apiKey, runtime.postProcessingApiKey),
+                                secrets = listOf(runtime.apiKey, runtime.postProcessingApiKey, job.postProcessingApi?.apiKey.orEmpty()),
                             ),
                             message = AppStrings.get(R.string.runtime_connection_success, "Connection successful"),
                         ),
@@ -637,7 +682,7 @@ class VoiceJobController(
             }
             is TranscriptionClient.Result.Failure -> {
                 val retry = runtime.app.retry
-                if (result.retryable && retry.enabled && job.retryCount < retry.maxRetries) {
+                if (job.mode != JobMode.PROMPT_CONNECTION_TEST && result.retryable && retry.enabled && job.retryCount < retry.maxRetries) {
                     val retryNumber = job.retryCount + 1
                     job.retryCount = retryNumber
                     val delay = retry.delayMillis(retryNumber)

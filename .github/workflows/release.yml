@@ -43,11 +43,20 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: .cache/ffmpeg-downloads
-          key: ffmpeg-downloads-8.1-opus-1.5.2-lame-3.100
+          key: ffmpeg-downloads-${{ hashFiles('scripts/build-android-ffmpeg.sh') }}
       - name: Build arm64 FFmpeg CLI
         env:
           DICTATE_NATIVE_BUILD_DIR: ${{ runner.temp }}/dictate-ffmpeg-tmp
         run: ./scripts/build-android-ffmpeg.sh
+      - name: Validate Android audio encoders and containers
+        env:
+          DICTATE_NATIVE_BUILD_DIR: ${{ runner.temp }}/dictate-ffmpeg-tmp
+          DICTATE_AUDIO_FULL: '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user e2fsprogs
+          sdkmanager 'system-images;android-26;default;arm64-v8a'
+          ./scripts/test-android-audio.sh
       - name: Validate signing secrets
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

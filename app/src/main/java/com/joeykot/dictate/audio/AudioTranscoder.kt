@@ -3,9 +3,6 @@ package com.joeykot.dictate.audio
 import android.content.Context
 import com.joeykot.dictate.R
 import com.joeykot.dictate.i18n.AppStrings
-import com.joeykot.dictate.model.AudioCodec
-import com.joeykot.dictate.model.AudioConfig
-import com.joeykot.dictate.model.AudioContainer
 import com.joeykot.dictate.model.Pcm16Format
 import com.joeykot.dictate.util.Diagnostics
 import java.io.File
@@ -30,7 +27,7 @@ class AudioTranscoder(
         rawInput: File,
         inputFormat: Pcm16Format,
         output: File,
-        config: AudioConfig,
+        plan: AudioEncodingPlan,
     ): Result {
         if (cancelledJobs.remove(jobId)) return Result.Cancelled
         if (!rawInput.isFile || rawInput.length() == 0L) {
@@ -44,22 +41,12 @@ class AudioTranscoder(
 
         output.parentFile?.mkdirs()
         output.delete()
-        val normalized = config.resolvedForInput(inputFormat.sampleRateHz)
-        val effectiveRate = effectiveSampleRate(normalized)
-        val command = buildCommand(
-            executable,
-            rawInput,
-            inputFormat,
-            output,
-            normalized,
-            effectiveRate,
-        )
+        val command = plan.command(executable, rawInput, inputFormat, output)
         diagnostics.info(
             "ffmpeg",
-            "job=$jobId codec=${normalized.codec.value} container=${normalized.container.value} " +
-                "input=${inputFormat.summary()} requestedSampleRate=${config.sampleRate} " +
-                "sampleRate=${normalized.sampleRate} effectiveRate=$effectiveRate " +
-                "bitDepth=${normalized.bitDepth} bitrate=${normalized.bitrateKbps}k",
+            "job=$jobId codec=${plan.config.codec.value} container=${plan.config.container.value} " +
+                "input=${inputFormat.summary()} outputRate=${plan.config.sampleRate} " +
+                "layout=${plan.layout.name} bitDepth=${plan.config.bitDepth} bitrateBps=${plan.config.bitrateBps}",
         )
 
         return try {
@@ -120,70 +107,6 @@ class AudioTranscoder(
             process.destroy()
             if (process.isAlive) process.destroyForcibly()
         }
-    }
-
-    private fun buildCommand(
-        executable: File,
-        input: File,
-        inputFormat: Pcm16Format,
-        output: File,
-        config: AudioConfig,
-        effectiveRate: Int,
-    ): List<String> = buildList {
-        add(executable.absolutePath)
-        addAll(listOf("-hide_banner", "-nostdin", "-y"))
-        addAll(
-            listOf(
-                "-f", "s16le",
-                "-ar", inputFormat.sampleRateHz.toString(),
-                "-ac", inputFormat.channelCount.toString(),
-            ),
-        )
-        addAll(listOf("-i", input.absolutePath, "-vn", "-ac", "1", "-ar", effectiveRate.toString()))
-
-        when (config.codec) {
-            AudioCodec.OPUS -> addAll(
-                listOf(
-                    "-c:a", "libopus",
-                    "-application", "voip",
-                    "-b:a", "${config.bitrateKbps}k",
-                    "-vbr", "on",
-                ),
-            )
-            AudioCodec.MP3 -> addAll(
-                listOf("-c:a", "libmp3lame", "-b:a", "${config.bitrateKbps}k"),
-            )
-            AudioCodec.AAC -> addAll(
-                listOf("-c:a", "aac", "-b:a", "${config.bitrateKbps}k", "-movflags", "+faststart"),
-            )
-            AudioCodec.PCM -> addAll(listOf("-c:a", pcmEncoder(config.bitDepth)))
-        }
-
-        addAll(listOf("-f", muxer(config.container), output.absolutePath))
-    }
-
-    private fun effectiveSampleRate(config: AudioConfig): Int = when (config.codec) {
-        AudioCodec.OPUS -> when (config.sampleRate) {
-            8_000, 16_000, 24_000, 48_000 -> config.sampleRate
-            else -> 48_000
-        }
-        else -> config.sampleRate
-    }
-
-    private fun pcmEncoder(bitDepth: Int): String = when (bitDepth) {
-        8 -> "pcm_u8"
-        16 -> "pcm_s16le"
-        24 -> "pcm_s24le"
-        32 -> "pcm_s32le"
-        else -> error("Unsupported PCM bit depth")
-    }
-
-    private fun muxer(container: AudioContainer): String = when (container) {
-        AudioContainer.OPUS -> "opus"
-        AudioContainer.OGG -> "ogg"
-        AudioContainer.MP3 -> "mp3"
-        AudioContainer.M4A -> "ipod"
-        AudioContainer.WAV -> "wav"
     }
 
     private companion object {

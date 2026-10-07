@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="prompt_same_provider">Как у основного провайдера</string>
+    <string name="prompt_test_api_help">Однократная проверка текущих настроек API без текста промпта и дополнительного JSON. Предварительное сохранение не требуется.</string>
     <string name="prompt_provider">Provider</string>
     <string name="prompt_base_url">Base URL</string>
     <string name="prompt_api_key">API Key</string>

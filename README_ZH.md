@@ -16,7 +16,7 @@ Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦
 | [![录音设置](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) | [![音频 API 设置](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) |
 | **3. 录音设置**<br>选择输出采样率、编码、容器和比特率。 | **4. 音频 API 设置**<br>配置转写服务的 Base URL、API Key、模型及附加 JSON 参数，并通过真实转写请求测试连接。 |
 | [![改写 API 设置](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![提示词编辑](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
-| **5. 改写 API 设置**<br>配置文本后处理的服务商、Base URL、API Key 和模型，管理提示词顺序并测试连接。 | **6. 提示词编辑**<br>设置每条提示词的图标、标题、内容及独立附加 JSON 参数，可单独覆盖模型等请求参数。 |
+| **5. 改写 API 设置**<br>配置文本后处理的服务商、Base URL、API Key 和模型，管理提示词顺序并测试连接。 | **6. 提示词编辑**<br>设置服务商、图标、标题、内容和附加 JSON；默认继承主 Provider，也可配置并测试独立 API。 |
 | [![重试设置](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![交互设置](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) |
 | **7. 重试设置**<br>开启自动重试，设置最大重试次数和初始等待时间。 | **8. 交互设置**<br>设置是否始终复制结果到剪贴板，以及长按阈值和双击最大间隔。 |
 | [![显示设置](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) | [![配置保存与导入导出](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) |
@@ -28,8 +28,8 @@ Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦
 - `AudioRecord` PCM 录音：按当前输入路由选择采样率，固定 16-bit 单声道；支持暂停/恢复、前台麦克风服务、唤醒锁和取消。
 - 无障碍悬浮按钮不抢焦点，可实时拖动并保存位置；可配置大小、不透明度，以及录制／暂停／处理中三种状态的预置或自定义色系，保存后无需重启无障碍服务；恢复时会按系统边距、刘海和可见屏幕重新裁剪，拖动不改变当前语音任务。
 - 已开始的录音在熄屏后继续；不提供锁屏控制或锁屏上屏。
-- 从源码构建 FFmpeg `n8.1`、Opus `1.5.2`、LAME `3.100`，目前只提供 `arm64-v8a` 预编译。
-- 支持 Opus、MP3、AAC、PCM/WAV，只展示有效编码与容器组合；默认输出采样率跟随当前录音输入，最高 48 kHz。
+- 从经过校验的源码包构建 FFmpeg `8.1` 及 Opus、LAME、Vorbis、AMR-NB/WB、Speex，目前只提供 `arm64-v8a` 二进制。
+- 提供 28 项音频编码选项，覆盖无损格式、语音编码、WMA、ADPCM、整数及浮点 PCM。设置按编码器联动采样率、位深度、容器和码率，录音结束后统一转换；自动输出采样率适配编码器与录音输入，最高 48 kHz。
 - 直接 multipart 请求 OpenAI Compatible `/v1/audio/transcriptions`；成功响应必须含顶层非空字符串 `text`；目前暂不考虑支持 OpenAI Compatible 以外的其他 API，如有其他厂商服务需求，可使用任意兼容转换服务转换为 OpenAI Compatible 使用。
 - 默认保留结果的剪贴板副本；关闭该开关后，只有明确写入失败才使用剪贴板兜底。
 - FFmpeg、HTTP 和指数退避等待均可取消，所有回调受递增任务 ID 保护。
@@ -39,8 +39,9 @@ Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦
 
 - **选区操作菜单**：选中文本后长按空闲悬浮按钮，展开提示词列表，点击条目即可执行；没有选中文本或尚未保存提示词时，长按继续重发上一条录音。
 - **独立服务配置**：在「改写 API 设置」中单独配置 Provider、Base URL、API Key 和 Model。支持 OpenAI-Compatible、OpenAI Responses、OpenAI Completions、Google、Anthropic、DeepSeek、Qwen、GLM。
+- **每条提示词独立选择 Provider**：默认「与主 Provider 相同」（Same as main provider），继承整套改写 API 设置；也可设置独立 Provider、Base URL、API Key 和 Model，并在保存前测试连接。
 - **自定义提示词与图标**：每项包含图标、标题、实际提示词及独立附加 JSON，支持新增、编辑、删除和排序。图标可使用 8 个内置选项，也可导入 SVG、PNG、JPG。
-- **按提示词覆盖模型和参数**：各条目的附加 JSON 可覆盖公共 Model 及其他请求字段；嵌套对象逐层合并，数组整体替换，其他值直接覆盖，显式为 `null` 的对象字段在请求中删除。
+- **按提示词覆盖模型和参数**：各条目的附加 JSON 可覆盖所选 API 的 Model 及其他请求字段；嵌套对象逐层合并，数组整体替换，其他值直接覆盖，显式为 `null` 的对象字段在请求中删除。
 - **按需处理文本**：通过自己编写的提示词，实现润色、改写、翻译、总结等操作；这些用途由用户配置，可处理已有文本或转写后的文本，无需先开始新的录音。
 - **共用写入与任务控制**：后处理与转写共用处理中状态、双击取消及自动重试。结果按实际写入时的焦点和选区插入或替换；后处理完成、失败或取消均不替换上一条录音。
 
@@ -190,7 +191,7 @@ stateDiagram-v2
 - Android 8.0+（`minSdk 26`）和 `arm64-v8a` 设备。
 - 已启用的 Dictate 无障碍服务；录音还需要麦克风权限。
 - 转写需要 OpenAI Compatible `POST /v1/audio/transcriptions` 端点、Base URL、API Key 和模型。
-- 后处理需要独立的 Provider、Base URL、API Key、模型配置及至少一条提示词。
+- 后处理需要有效的 Provider、Base URL、API Key、模型配置及至少一条提示词；API 配置可使用公共设置，也可按提示词单独设置。
 
 选区读取及无障碍写入依赖目标应用提供的能力。只读文本可以作为后处理输入；密码框、受保护界面和自绘控件可能不暴露选区或拒绝写入。无可写入焦点时沿用剪贴板兜底，项目不做逐 App 专项兼容。
 
@@ -212,7 +213,17 @@ export GRADLE_USER_HOME=/tmp/gradle-user-home
 
 Release 构建启用 R8 代码压缩、优化、混淆和资源缩减。CI 将 `mapping.txt` 保存为工作流产物，用于还原崩溃堆栈。Debug 构建保持不压缩。
 
-脚本会用 SHA-256 核验 FFmpeg `8.1`、Opus `1.5.2`、LAME `3.100` 的官方源码包，只构建 AArch64，逐项检查必需的 demuxer、编码器、容器和滤镜，并生成兼容 16 KiB 页面的 Android PIE 可执行文件 `libffmpeg.so`。
+原生构建需要 Linux、`make`、`pkg-config`、`curl`、`tar` 和 XZ 支持。脚本用 SHA-256 核验 FFmpeg `8.1`、Opus `1.5.2`、LAME `3.100`、libogg `1.3.5`、libvorbis `1.3.7`、OpenCORE AMR `0.1.6`、VisualOn AMR-WB `0.1.3`、Speex `1.2.1` 的源码包，只构建 AArch64，逐项检查必需的 demuxer、编码器、容器和滤镜，并验证生成的 Android PIE 可执行文件采用 16 KiB 加载对齐。此 FFmpeg 构建启用 `--enable-gpl --enable-version3`，依赖许可和校验值记录在 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
+
+完成原生构建后，可用 QEMU 配合 Android 8 运行库执行实际打包的 Android 二进制进行音频集成测试。额外需要 `qemu-user`（`qemu-aarch64`）、`e2fsprogs`（`debugfs`）、Python 3 和主机 C 编译器。脚本直接从 SDK 镜像提取运行库，无需挂载镜像，并使用已下载的源码构建独立的 FFmpeg 8.1 解码器和探测工具。
+
+```bash
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'system-images;android-26;default;arm64-v8a'
+DICTATE_AUDIO_FULL=1 ./scripts/test-android-audio.sh
+./gradlew :app:testDebugUnitTest :app:lintDebug
+```
+
+完整音频矩阵覆盖所有可选编码与容器、采样率预设和可选位深度，检查默认、最低、最高码率，以及 AMR/Speex 的全部码率档位。验证内容包括解码结果、流参数、裸 PCM 长度和字节序，以及单声道向双声道、六声道逐样本复制。CI 在发布打包前执行此矩阵；QEMU 验证不能替代麦克风和真机测试。
 
 随 APK 分发的连通性测试音频是单词 “test” 的 16 kHz 单声道合成语音，使用 Flite `2.2` 的 `cmu_us_slt` 语音生成。可复现命令位于 `scripts/generate-connectivity-test-audio.sh`，来源与 CMU 许可记录在 `THIRD_PARTY_LICENSES.md`。
 
@@ -241,15 +252,56 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 
 「显示通知」开关反映系统中的应用通知及录音通知渠道状态。点击后进入系统通知设置，返回时自动同步；关闭通知不影响录音。Android 13 及以上版本关闭通知栏通知后，系统任务管理器仍可能显示正在运行的前台服务。此项由系统管理，不随应用配置导出。
 
+### 音频编码设置
+
+录音保持 16-bit 单声道 PCM，采样率由当前输入路由决定。编码时由 FFmpeg 转换采样格式、位深度并重采样。目前所有可选编码器都接受单声道；如果编码器要求更多声道，转换流程会选择其支持的最小声道布局，将原始单声道复制到每个声道。
+
+默认仍为 MP3、自动采样率和 128 kbps。自动模式先将录音采样率限制到最高 48 kHz，再选择编码器支持的最近采样率，距离相同时取较低值。如果保存的码率与实际采样率不兼容，本次录音采用该采样率下的默认码率，保留已保存的配置。手动采样率预设包括 7.35、8、11.025、12、16、22.05、24、32、44.1、48、64、88.2、96、176.4、192 kHz，按编码器过滤。
+
+| 编码选项 | 输出容器 | 采样率／位深度限制 |
+|---|---|---|
+| Opus | OPUS、OGG、WEBM、MP4、MKV、MKA | 8 / 12 / 16 / 24 / 48 kHz |
+| MP3 | MP3、WAV、AVI、MKV、MKA、MPEG；满足条件时提供 MP4/FLV | 8～48 kHz 的预设；容器限制见下文 |
+| AAC | M4A、MP4、AAC（ADTS）、FLV、MKV、MKA、MOV | 最高 96 kHz；AAC/WAV 无法可靠完成编码后解码，因此不提供 |
+| Vorbis | OGG、WEBM、MKV、MKA | 8～48 kHz 的预设 |
+| FLAC | FLAC、OGG、MKV、MKA | 16 / 24-bit 输出 |
+| ALAC | M4A、MP4、MOV | 16 / 24-bit 输出 |
+| AC-3 | AC3、M4A、MP4、WAV、AVI、MKV、MKA、MPEG | 32 / 44.1 / 48 kHz |
+| E-AC-3 | EAC3、MP4、MKV、MKA | 32 / 44.1 / 48 kHz |
+| MP2 | WAV、MP4、MPEG | 16 / 22.05 / 24 / 32 / 44.1 / 48 kHz |
+| ADPCM（MS） | WAV | 从 PCM16 转换 |
+| AMR-NB | AMR、WAV | 8 kHz；精确的 4.75～12.2 kbps 档位 |
+| AMR-WB | AMR | 16 kHz；精确的 6.6～23.85 kbps 档位 |
+| Speex | SPX、OGG | 8 / 16 / 32 kHz；采用对应采样率的实际码率档位 |
+| WavPack | WV | 16 / 24 / 32-bit 输出 |
+| WMA v1 / v2 | WMA、ASF | 8～48 kHz 的预设 |
+| PCM | WAV；16/24/32-bit 可用 MP4、MOV 及对应的 S16LE/S24LE/S32LE 裸流；16-bit 另可用 AVI | 8 / 16 / 24 / 32-bit；无符号 8-bit 使用 WAV |
+| PCM 8-bit（有符号） | AIFF、S8 | 固定有符号 8-bit |
+| PCM A-law / μ-law | WAV、对应的 ALAW/MULAW 裸流 | 固定压扩格式 |
+| PCM Float 32/64-bit（LE） | WAV、MP4、对应的 F32LE/F64LE 裸流 | 固定浮点格式 |
+| PCM 64-bit（LE） | WAV | 固定有符号 64-bit |
+| PCM 16/24/32-bit（BE） | AIFF、MP4、对应的 S16BE/S24BE/S32BE 裸流 | 固定大端整数格式 |
+| PCM Float 32/64-bit（BE） | AIFF、MP4、对应的 F32BE/F64BE 裸流 | 固定大端浮点格式 |
+
+MP3 使用 MP4 时要求至少 16 kHz；使用 FLV 时只提供 11.025、22.05、44.1、48 kHz。自动采样率下的 MP3 采用公共容器集合，不提供 MP4/FLV，以保证切换输入路由后仍保留所选容器。表中未限制采样率的编码器使用完整预设列表。
+
+位深度控件用于 PCM、FLAC、ALAC、WavPack；码率控件只用于接受目标码率的编码器。码率按精确的 bps 保存并传给 FFmpeg，因此 AMR-NB 的 4.75 kbps、AMR-WB 的 23.85 kbps 等值不会被取整。文件扩展名和上传 MIME 类型统一取自实际编码设置，AMR-WB 使用 `audio/amr-wb`，裸 PCM 使用 `application/octet-stream`。
+
+上表表示本地输出能力，所配置的转写服务还需接受对应编码、容器和采样率。裸 PCM 没有格式头，接收方需要获知匹配的采样格式、采样率和声道数；可使用目标设置执行端点测试，确认服务兼容性。
+
 ### 后处理配置
 
 公共配置依次为 Provider、Base URL、API Key、Model，下方是「新增提示词」、已保存条目和「测试连接」。支持 OpenAI-Compatible、OpenAI Responses、OpenAI Completions、Google、Anthropic、DeepSeek、Qwen、GLM。OpenAI Completions 使用 `/chat/completions` 接口。提示词放入对应 Provider 的系统／开发者级指令位置，选中文本作为用户输入。
 
-点击「新增提示词」或已有条目，在弹窗内配置图标、标题、提示词内容和该条目的附加 JSON。保存后立即持久化；编辑弹窗支持删除，列表的上下箭头调整菜单顺序。公共配置通过「保存设置」提交。转写和后处理分别保存 API Key。
+点击「新增提示词」或已有条目，在弹窗内配置 Provider、图标、标题、提示词内容和附加 JSON。点击保存后，提示词及其独立 API Key 一并持久化。保存时校验标题、内容和附加 JSON，允许 API 字段尚未填完，测试或执行时再检查。编辑弹窗支持删除，列表的上下箭头调整菜单顺序；公共配置通过「保存设置」提交。
+
+新增提示词和升级前已保存的提示词默认选择「与主 Provider 相同」（Same as main provider）。这里的「主」指「改写 API 设置」中的公共配置，整套继承 Provider、Base URL、API Key 和 Model。选择具体 Provider 后完全使用该条目的 API 字段，即使它与主 Provider 相同，空字段也不会借用公共值。切回继承模式会隐藏并保留独立字段及密钥，但请求不使用这些隐藏值。
 
 图标提供 8 个内置选项，也可导入 SVG、PNG、JPG。自定义图标复制到应用私有目录，单个文件最多 1 MiB，总计最多 8 MiB；配置导出携带被引用的图标，缺失或无效资源回退到内置图标。
 
-后处理「测试连接」使用当前公共配置发送最小文本请求，展示结果且不写入编辑器。各提示词的附加参数在执行对应条目时生效。转写和后处理共用「重试设置」；请求期间修改配置不会改变已开始任务及其重试所用的输入和参数。
+公共「测试连接」使用当前公共配置发送最小文本请求，遵循「重试设置」。转写和正常执行提示词也遵循该设置。每次执行提示词时只解析一次实际 API 配置；任务运行期间修改设置，不会改变该任务及其重试所用的 API、输入、附加 JSON 和重试参数。
+
+选择独立 Provider 后，提示词编辑弹窗会显示「测试连接」。它使用尚未保存的 Provider、Base URL、API Key 和 Model，以及固定的最小指令和输入，忽略条目的标题、提示词正文与附加 JSON。测试只发一次请求，不自动重试，不保存设置，也不写入编辑器或剪贴板。修改 API 字段、切换 Provider、关闭弹窗或销毁页面都会取消该测试；旋转屏幕会保留草稿并取消测试，恢复后不自动重测。公共连接测试同样不写入编辑器或剪贴板。
 
 ### 附加 JSON 合并
 
@@ -265,13 +317,15 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 }
 ```
 
-公共 Model 是默认值，最终请求按合并后的 Model 校验。Google 的最终模型用于请求 URL。附加参数应符合所选 Provider 的接口格式；字段删除后缺少接口必需参数时会收到配置或服务端错误。
+所选公共或独立 API 配置中的 Model 是默认值，最终请求按合并后的 Model 校验。Google 的最终模型用于请求 URL。附加参数应符合所选 Provider 的接口格式；字段删除后缺少接口必需参数时会收到配置或服务端错误。
 
-配置导出使用 `schemaVersion: 4`，包含界面语言 `language` 标签、后处理公共配置、有序提示词及自定义图标，继续支持导入旧版 1～3 配置。旧配置没有提示词时采用空列表，没有 `language` 字段时默认英文。
+配置导出使用 `schemaVersion: 6`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。继续支持导入旧版 1～5 配置，其中 1～4 版的 `bitrateKbps` 换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
 
 “始终复制到剪贴板”默认开启。关闭后恢复为仅兜底模式：只有当前焦点明确写入失败时才复制。无法确认写入结果时，不会自动重试或复制，因为文本仍可能已写入编辑器。
 
-应使用 HTTPS。音频和待处理文本分别直接发送到配置的 Base URL；Dictate 不提供 API、代理或账号系统。两类 API Key 使用 Android Keystore 中的 AES 密钥分别加密，默认导出不含密钥；导入密钥需要明确确认。
+应使用 HTTPS。音频和待处理文本分别直接发送到配置的 Base URL；Dictate 不提供 API、代理或账号系统。转写、公共改写 API 和各提示词的独立 API Key 使用 Android Keystore 中的 AES 密钥分别加密，导出不含密钥。提示词密钥按稳定的条目 ID 保存，改名和排序不改变归属，删除条目时一并清理。
+
+导入密钥需要明确确认，包括提示词中可选的 `apiKey`。导入条目未提供 `apiKey` 时，只有条目 ID、Provider 和去掉首尾空白的 Base URL 均与现有条目一致，才保留原密钥；否则密钥为空。显式提供空字符串 `apiKey` 会清除已有密钥。
 
 ## 许可证
 

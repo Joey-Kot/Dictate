@@ -97,7 +97,7 @@
     <string name="main_scheme_sunset">Coucher de soleil</string>
     <string name="main_scheme_color_blind">Adaptée au daltonisme</string>
     <string name="main_scheme_custom">Personnalisée</string>
-    <string name="main_sample_rate_auto">Selon l’entrée audio (jusqu’à 48 kHz)</string>
+    <string name="main_sample_rate_auto">Automatique (entrée et codec, jusqu’à 48 kHz)</string>
     <string name="main_color_picker">Sélecteur de couleur circulaire</string>
     <string name="main_about">À propos</string>
     <string name="main_about_author">Auteur</string>

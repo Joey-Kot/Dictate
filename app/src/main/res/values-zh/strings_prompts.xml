@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="prompt_same_provider">与主 Provider 相同</string>
+    <string name="prompt_test_api_help">使用当前 API 设置测试一次，不包含提示词正文和附加 JSON，无需先保存。</string>
     <string name="prompt_provider">Provider</string>
     <string name="prompt_base_url">Base URL</string>
     <string name="prompt_api_key">API Key</string>

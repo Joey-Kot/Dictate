@@ -77,6 +77,24 @@ class SecureApiKeyStore(
         }
     }
 
+    fun getPrompt(id: String): String {
+        val key = KEY_PROMPT_PREFIX + id
+        val encoded = preferences.getString(key, null) ?: return ""
+        return decryptOrClear(encoded) { preferences.edit().remove(key).apply() }
+    }
+
+    /** Stage secrets and deletions in the same transaction as their prompt configurations. */
+    fun stagePrompts(editor: SharedPreferences.Editor, ids: Set<String>, updates: Map<String, String>) {
+        require(updates.keys.all { it in ids }) { "A prompt key must belong to a saved prompt" }
+        val encrypted = updates.mapValues { encrypt(it.value.trim()) }
+        preferences.all.keys.filter { it.startsWith(KEY_PROMPT_PREFIX) && it.removePrefix(KEY_PROMPT_PREFIX) !in ids }
+            .forEach { editor.remove(it) }
+        encrypted.forEach { (id, value) ->
+            if (value == null) editor.remove(KEY_PROMPT_PREFIX + id)
+            else editor.putString(KEY_PROMPT_PREFIX + id, value)
+        }
+    }
+
     private fun encrypt(value: String): String? {
         if (value.isEmpty()) return null
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -122,6 +140,7 @@ class SecureApiKeyStore(
     private companion object {
         const val KEY_VALUE = "secure.api_key_ciphertext"
         const val KEY_POST_PROCESSING_VALUE = "secure.post_processing_api_key_ciphertext"
+        const val KEY_PROMPT_PREFIX = "secure.prompt_api_key_ciphertext."
         const val KEY_MIGRATION_COMPLETE = "secure.api_key_migrated"
         const val LEGACY_PREFS_NAME = "secure_settings"
         const val LEGACY_KEY_VALUE = "api_key_ciphertext"

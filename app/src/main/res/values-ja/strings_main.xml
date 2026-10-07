@@ -97,7 +97,7 @@
     <string name="main_scheme_sunset">サンセット</string>
     <string name="main_scheme_color_blind">色覚に配慮</string>
     <string name="main_scheme_custom">カスタム</string>
-    <string name="main_sample_rate_auto">録音入力に合わせる（最大 48 kHz）</string>
+    <string name="main_sample_rate_auto">自動（録音入力とコーデックに対応、最大 48 kHz）</string>
     <string name="main_color_picker">円形カラーピッカー</string>
     <string name="main_about">アプリについて</string>
     <string name="main_about_author">作者</string>

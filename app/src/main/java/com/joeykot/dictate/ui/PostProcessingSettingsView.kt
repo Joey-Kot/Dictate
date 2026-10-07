@@ -11,10 +11,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.AdapterView
 import android.widget.Button
 import android.widget.EditText
 import android.widget.HorizontalScrollView
@@ -44,6 +47,8 @@ class PostProcessingSettingsView(
     private val enqueueWrite: (operation: () -> Unit, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) -> Boolean,
     private val chooseIcon: (String) -> Unit,
     private val testConnection: (PostProcessingConfig, String, (VoiceJobController.ConnectionTestResult) -> Unit) -> Boolean,
+    private val testPromptConnection: (PromptConfig, String, (VoiceJobController.ConnectionTestResult) -> Unit) -> Long?,
+    private val cancelPromptTest: (Long) -> Unit,
 ) : LinearLayout(activity) {
     private val providerInput = Spinner(activity).apply {
         adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item,
@@ -63,6 +68,7 @@ class PostProcessingSettingsView(
     private var editor: AlertDialog? = null
     private var editorId: String? = null
     private var captureEditor: (() -> Bundle?)? = null
+    private var cancelEditorTest: (() -> Unit)? = null
     private var deliverIcon: ((Result<PromptIconStore.ImportedIcon>) -> Unit)? = null
     private var beginImport: ((Uri) -> Unit)? = null
     private var iconImport: IconImport? = null
@@ -125,6 +131,9 @@ class PostProcessingSettingsView(
             title = state.getString("title").orEmpty(),
             prompt = state.getString("prompt").orEmpty(),
             additionalJson = state.getString("json").orEmpty(),
+            provider = PostProcessingProvider.entries.find { it.name == state.getString("provider") },
+            baseUrl = state.getString("baseUrl").orEmpty(),
+            model = state.getString("model").orEmpty(),
         )
         openEditor(initial, state)
     }
@@ -135,6 +144,7 @@ class PostProcessingSettingsView(
 
     fun closeEditor(preserveDraft: Boolean = false) {
         preserveEditorDraft = preserveDraft
+        cancelEditorTest?.invoke()
         cancelIconImport()
         editor?.dismiss()
     }
@@ -241,6 +251,45 @@ class PostProcessingSettingsView(
         var customIcon = initial.customIcon
         val importedIcons = restored?.getStringArrayList("importedIcons")?.toMutableSet() ?: mutableSetOf()
         var saving = false
+        var testing = false
+        var testJobId: Long? = null
+        var testVersion = 0L
+        var selectedProvider = initial.provider
+        val provider = Spinner(activity).apply {
+            adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item,
+                listOf(activity.getString(R.string.prompt_same_provider)) + PostProcessingProvider.entries.map { it.label })
+            setSelection(initial.provider?.ordinal?.plus(1) ?: 0)
+        }
+        val baseUrl = input("https://example.com/v1").apply { setText(initial.baseUrl) }
+        val apiKey = input(activity.getString(R.string.prompt_api_key)).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(restored?.getString("apiKey") ?: repository.promptApiKey(initial.id))
+        }
+        val model = input(activity.getString(R.string.prompt_model_hint)).apply { setText(initial.model) }
+        val apiFields = LinearLayout(activity).apply {
+            orientation = VERTICAL
+            visibility = if (initial.provider == null) GONE else VISIBLE
+            addView(labeled(activity.getString(R.string.prompt_base_url), baseUrl))
+            addView(labeled(activity.getString(R.string.prompt_api_key), apiKey))
+            addView(labeled(activity.getString(R.string.prompt_model), model))
+        }
+        val test = Button(activity).apply { text = activity.getString(R.string.prompt_test_connection) }
+        val resultView = TextView(activity).apply { setTextIsSelectable(true) }
+        val testControls = LinearLayout(activity).apply {
+            orientation = VERTICAL
+            visibility = if (initial.provider == null) GONE else VISIBLE
+            addView(test, matchWrap(10))
+            addView(TextView(activity).apply {
+                text = activity.getString(R.string.prompt_test_api_help)
+                textSize = 12f
+                setTextColor(Color.GRAY)
+            }, matchWrap())
+            addView(resultView, matchWrap(4))
+        }
+        fun apiDraft() = initial.copy(
+            provider = PostProcessingProvider.entries.getOrNull(provider.selectedItemPosition - 1),
+            baseUrl = baseUrl.text.toString().trim(), model = model.text.toString().trim(),
+        )
         val title = input(activity.getString(R.string.prompt_title_hint)).apply { setText(initial.title) }
         val prompt = multiline(activity.getString(R.string.prompt_content_hint), 4).apply { setText(initial.prompt) }
         val json = multiline(activity.getString(R.string.prompt_json_hint), 3).apply {
@@ -285,6 +334,8 @@ class PostProcessingSettingsView(
         val content = LinearLayout(activity).apply {
             orientation = VERTICAL
             setPadding(dp(20), dp(4), dp(20), dp(10))
+            addView(labeled(activity.getString(R.string.prompt_provider), provider))
+            addView(apiFields, matchWrap())
             addView(labeled(activity.getString(R.string.prompt_icon), HorizontalScrollView(activity).apply { addView(iconRow) }))
             addView(importButton, matchWrap())
             addView(labeled(activity.getString(R.string.prompt_title), title))
@@ -295,6 +346,7 @@ class PostProcessingSettingsView(
                 textSize = 12f
                 setTextColor(Color.GRAY)
             }, matchWrap(4))
+            addView(testControls, matchWrap())
         }
         val dialog = AlertDialog.Builder(activity)
             .setTitle(if (editingExisting) activity.getString(R.string.prompt_edit) else activity.getString(R.string.prompt_add))
@@ -315,12 +367,33 @@ class PostProcessingSettingsView(
                 putString("title", title.text.toString())
                 putString("prompt", prompt.text.toString())
                 putString("json", json.text.toString())
+                putString("provider", apiDraft().provider?.name)
+                putString("baseUrl", baseUrl.text.toString())
+                putString("apiKey", apiKey.text.toString())
+                putString("model", model.text.toString())
                 putStringArrayList("importedIcons", ArrayList(importedIcons))
                 putString("importUri", iconImport?.takeIf { it.editorId == sessionId }?.uri?.toString())
             }
         }
+        fun updateButtons() {
+            val importing = iconImport?.editorId == sessionId
+            test.isEnabled = !testing && !saving
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !saving && !testing && !importing
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.isEnabled = !saving && !testing && !importing
+        }
+        fun stopTest() {
+            testVersion++
+            val jobId = testJobId
+            testJobId = null
+            testing = false
+            jobId?.let(cancelPromptTest)
+            resultView.text = ""
+            updateButtons()
+        }
+        cancelEditorTest = ::stopTest
         updateSelection()
         dialog.setOnDismissListener {
+            stopTest()
             val retained = if (preserveEditorDraft && editorId == sessionId) savedDraftIcons else emptySet()
             // Dismiss callbacks are queued; an older dialog must not detach a newly opened editor.
             if (editorId == sessionId) {
@@ -328,6 +401,7 @@ class PostProcessingSettingsView(
                 editor = null
                 editorId = null
                 captureEditor = null
+                cancelEditorTest = null
                 beginImport = null
                 deliverIcon = null
             }
@@ -342,12 +416,49 @@ class PostProcessingSettingsView(
         // Give multiline editors room when the keyboard is visible, including on small displays.
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
+        provider.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val next = PostProcessingProvider.entries.getOrNull(position - 1)
+                if (selectedProvider != next) stopTest()
+                selectedProvider = next
+                apiFields.visibility = if (next == null) GONE else VISIBLE
+                testControls.visibility = if (next == null) GONE else VISIBLE
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        val apiWatcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { stopTest() }
+            override fun afterTextChanged(s: Editable?) = Unit
+        }
+        listOf(baseUrl, apiKey, model).forEach { it.addTextChangedListener(apiWatcher) }
+        test.setOnClickListener {
+            if (testing || saving || apiDraft().provider == null) return@setOnClickListener
+            selectedProvider = apiDraft().provider
+            testing = true
+            val version = ++testVersion
+            resultView.text = activity.getString(R.string.prompt_testing)
+            updateButtons()
+            val jobId = testPromptConnection(apiDraft(), apiKey.text.toString().trim()) { result ->
+                if (version == testVersion && editorId == sessionId && editor === dialog && dialog.isShowing && !activity.isDestroyed) {
+                    testing = false
+                    testJobId = null
+                    resultView.text = formatTestResult(result)
+                    updateButtons()
+                }
+            }
+            if (version == testVersion && testing) {
+                testJobId = jobId
+                if (jobId == null) { testing = false; updateButtons() }
+            }
+        }
+
         fun showImporting(importing: Boolean) {
             importButton.isEnabled = !importing
             importButton.text = if (importing) activity.getString(R.string.prompt_importing_icon) else activity.getString(R.string.prompt_import_icon)
             choices.forEach { it.second.isEnabled = !importing }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = !importing && !saving
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.isEnabled = !importing && !saving
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = !importing && !saving && !testing
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.isEnabled = !importing && !saving && !testing
         }
         beginImport = { uri ->
             showImporting(true)
@@ -367,14 +478,15 @@ class PostProcessingSettingsView(
         }
         restored?.getString("importUri")?.let { beginImport?.invoke(Uri.parse(it)) }
 
-        fun persist(prompts: List<PromptConfig>) {
+        fun persist(prompts: List<PromptConfig>, apiKeyUpdates: Map<String, String> = emptyMap()) {
             saving = true
+            test.isEnabled = false
             dialog.setCancelable(false)
             listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
                 .forEach { dialog.getButton(it)?.isEnabled = false }
             val accepted = enqueueWrite(
                 {
-                    repository.savePrompts(prompts)
+                    repository.savePrompts(prompts, apiKeyUpdates)
                     importedIcons.forEach { PromptIconStore.deleteIfUnused(activity, it, prompts) }
                 },
                 {
@@ -388,6 +500,7 @@ class PostProcessingSettingsView(
                     listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
                         .forEach { button -> dialog.getButton(button)?.isEnabled = true }
                     toast(it.message ?: activity.getString(R.string.prompt_save_failed))
+                    updateButtons()
                 },
             )
             if (!accepted) {
@@ -395,9 +508,11 @@ class PostProcessingSettingsView(
                 dialog.setCancelable(true)
                 listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
                     .forEach { dialog.getButton(it)?.isEnabled = true }
+                updateButtons()
             }
         }
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            if (saving || testing) return@setOnClickListener
             title.error = null
             prompt.error = null
             json.error = null
@@ -412,17 +527,18 @@ class PostProcessingSettingsView(
                         json.requestFocus()
                         return@setOnClickListener
                     }
-                    val updated = initial.copy(icon = selectedIcon, customIcon = customIcon,
+                    val updated = apiDraft().copy(icon = selectedIcon, customIcon = customIcon,
                         title = title.text.toString().trim(), prompt = prompt.text.toString().trim(),
                         additionalJson = json.text.toString().trim())
                     val prompts = repository.get().postProcessing.prompts.toMutableList()
                     val index = prompts.indexOfFirst { it.id == updated.id }
                     if (index >= 0) prompts[index] = updated else prompts.add(updated)
-                    persist(prompts)
+                    persist(prompts, mapOf(updated.id to apiKey.text.toString().trim()))
                 }
             }
         }
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+            if (saving || testing) return@setOnClickListener
             persist(repository.get().postProcessing.prompts.filterNot { it.id == initial.id })
         }
     }
@@ -433,18 +549,20 @@ class PostProcessingSettingsView(
         val accepted = testConnection(readConfig(), readApiKey()) { result ->
             if (activity.isDestroyed) return@testConnection
             testButton.isEnabled = true
-            testResult.text = buildString {
-                append(if (result.success) activity.getString(R.string.prompt_test_success) else activity.getString(R.string.prompt_test_failure))
-                result.statusCode?.let { append("\n" + activity.getString(R.string.prompt_test_http, it)) }
-                result.elapsedMillis?.let { append("\n" + activity.getString(R.string.prompt_test_elapsed, it)) }
-                if (result.text.isNotBlank()) append("\n" + activity.getString(R.string.prompt_test_text, result.text))
-                if (result.message.isNotBlank()) append("\n" + activity.getString(R.string.prompt_test_result, result.message))
-                if (result.serverSummary.isNotBlank()) append("\n" + activity.getString(R.string.prompt_test_server_summary, result.serverSummary))
-            }
+            testResult.text = formatTestResult(result)
         }
         if (!accepted) {
             testButton.isEnabled = true
         }
+    }
+
+    private fun formatTestResult(result: VoiceJobController.ConnectionTestResult): String = buildString {
+        append(if (result.success) activity.getString(R.string.prompt_test_success) else activity.getString(R.string.prompt_test_failure))
+        result.statusCode?.let { append("\n" + activity.getString(R.string.prompt_test_http, it)) }
+        result.elapsedMillis?.let { append("\n" + activity.getString(R.string.prompt_test_elapsed, it)) }
+        if (result.text.isNotBlank()) append("\n" + activity.getString(R.string.prompt_test_text, result.text))
+        if (result.message.isNotBlank()) append("\n" + activity.getString(R.string.prompt_test_result, result.message))
+        if (result.serverSummary.isNotBlank()) append("\n" + activity.getString(R.string.prompt_test_server_summary, result.serverSummary))
     }
 
     private fun selectionBackground(selected: Boolean) = GradientDrawable().apply {
