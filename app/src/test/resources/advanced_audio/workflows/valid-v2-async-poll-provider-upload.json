@@ -1,0 +1,140 @@
+{
+  "schema_version": 2,
+  "name": "Provider upload with async polling",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "filetrans",
+      "type": "text"
+    }
+  ],
+  "secrets": [
+    {
+      "id": "api_key",
+      "label": "API key",
+      "required": true
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "provider_upload"
+    },
+    "mime": "audio/wav"
+  },
+  "recognition": {
+    "mode": "async_poll",
+    "prepare": {
+      "method": "POST",
+      "url": "https://uploads.example.test/v1/audio",
+      "headers": {
+        "Authorization": "Bearer {{secret:api_key}}"
+      },
+      "body": {
+        "type": "multipart",
+        "fields": [
+          {
+            "name": "file",
+            "type": "audio_file"
+          }
+        ]
+      },
+      "captures": [
+        {
+          "id": "audio_ref",
+          "from": {
+            "type": "json_path",
+            "path": "$.audio_ref"
+          },
+          "sensitive": true
+        }
+      ]
+    },
+    "submit": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/tasks",
+      "headers": {
+        "Authorization": "Bearer {{secret:api_key}}"
+      },
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "audio": "{{capture:audio_ref}}"
+        }
+      },
+      "captures": [
+        {
+          "id": "task_id",
+          "from": {
+            "type": "json_path",
+            "path": "$.task_id"
+          }
+        }
+      ]
+    },
+    "poll": {
+      "request": {
+        "method": "GET",
+        "url": "https://asr.example.test/v1/tasks/{{capture:task_id}}",
+        "headers": {
+          "Authorization": "Bearer {{secret:api_key}}"
+        },
+        "captures": [
+          {
+            "id": "transcription_url",
+            "from": {
+              "type": "json_path",
+              "path": "$.transcription_url"
+            },
+            "sensitive": true
+          }
+        ]
+      },
+      "interval_ms": 1000,
+      "timeout_ms": 600000,
+      "pending": [
+        {
+          "from": {
+            "type": "json_path",
+            "path": "$.status"
+          },
+          "operator": "eq",
+          "value": "RUNNING"
+        }
+      ],
+      "success": [
+        {
+          "from": {
+            "type": "json_path",
+            "path": "$.status"
+          },
+          "operator": "eq",
+          "value": "SUCCEEDED"
+        }
+      ],
+      "failure": [
+        {
+          "from": {
+            "type": "json_path",
+            "path": "$.status"
+          },
+          "operator": "eq",
+          "value": "FAILED"
+        }
+      ]
+    },
+    "result_steps": [
+      {
+        "method": "GET",
+        "url": "{{capture:transcription_url}}",
+        "headers": {
+          "Authorization": "Bearer {{secret:api_key}}"
+        }
+      }
+    ],
+    "final_text": {
+      "type": "plain_body"
+    }
+  }
+}

@@ -9,14 +9,30 @@ import android.widget.Toast
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.accessibility.TextDelivery
 import com.joeykot.dictate.accessibility.DictateAccessibilityService
+import com.joeykot.dictate.advanced_audio.AdvancedAudioClient
+import com.joeykot.dictate.advanced_audio.AdvancedAudioWorkflow
+import com.joeykot.dictate.advanced_audio.AdvancedAudioWorkflowCodec
+import com.joeykot.dictate.advanced_audio.RealtimeSessionRecognition
+import com.joeykot.dictate.advanced_audio.RealtimeWorkflow
+import com.joeykot.dictate.advanced_audio.RuntimeTemplateValues
+import com.joeykot.dictate.advanced_audio.WorkflowValidator
+import com.joeykot.dictate.advanced_audio.http.AdvancedCancellationSource
+import com.joeykot.dictate.advanced_audio.remote_audio.RemoteAudioConfigValidator
 import com.joeykot.dictate.audio.AudioEncodingPlan
 import com.joeykot.dictate.audio.AudioTranscoder
+import com.joeykot.dictate.audio.PcmCaptureTee
+import com.joeykot.dictate.audio.PcmPacketSink
 import com.joeykot.dictate.audio.RecordingService
+import com.joeykot.dictate.advanced_audio.realtime.LivePcmTeeSource
+import com.joeykot.dictate.advanced_audio.realtime.Pcm16ReplayChunkSource
+import com.joeykot.dictate.advanced_audio.realtime.RealtimeSessionResult
+import com.joeykot.dictate.advanced_audio.realtime.RealtimeSessionRunner
 import com.joeykot.dictate.R
 import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.model.JobState
 import com.joeykot.dictate.model.JobUiState
 import com.joeykot.dictate.model.Pcm16Format
+import com.joeykot.dictate.model.RemoteAudioCredentialIds
 import com.joeykot.dictate.model.RuntimeSettings
 import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.model.ResolvedPostProcessingApi
@@ -35,6 +51,8 @@ import java.util.concurrent.Future
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.time.Instant
+import java.util.UUID
 
 class VoiceJobController(
     private val application: DictateApplication,
@@ -75,15 +93,60 @@ class VoiceJobController(
         var retryCount: Int = 0,
         var workerFuture: Future<*>? = null,
         var retryFuture: ScheduledFuture<*>? = null,
+        var advancedCancellationSource: AdvancedCancellationSource? = null,
+        var realtimeRecording: RealtimeRecording? = null,
         val testCallback: ((ConnectionTestResult) -> Unit)? = null,
         val inputText: String = "",
         val prompt: PromptConfig? = null,
         val postProcessingApi: ResolvedPostProcessingApi? = null,
     )
 
+    /**
+     * One logical microphone recording can have several live websocket
+     * sessions because a pause always finalizes its current session. Their
+     * texts are usable only when every session reaches explicit completion;
+     * otherwise the complete raw PCM file is replayed from zero.
+     */
+    private data class RealtimeRecording(
+        val runtime: RuntimeSettings,
+        val workflow: AdvancedAudioWorkflow,
+        val captureFormat: Pcm16Format,
+        val cancellation: AdvancedCancellationSource,
+        val segments: MutableList<RealtimeSegment> = mutableListOf(),
+        var activeSegment: RealtimeSegment? = null,
+        var liveFailed: Boolean = false,
+        var recordingCompleted: Boolean = false,
+        var replayStarted: Boolean = false,
+    )
+
+    private data class RealtimeSegment(
+        val tee: PcmCaptureTee,
+        var closed: Boolean = false,
+        var terminal: Boolean = false,
+        var text: String? = null,
+        var future: Future<*>? = null,
+    )
+
+    /**
+     * Immutable state shared by all attempts of one complete local PCM replay.
+     * Each attempt still creates a new source and websocket session, while
+     * template runtime values remain stable for the logical replay.
+     */
+    private data class RealtimeReplayContext(
+        val rawFile: File,
+        val rawFormat: Pcm16Format,
+        val realtime: RealtimeWorkflow,
+        val runtime: RuntimeTemplateValues,
+        val cancellation: AdvancedCancellationSource,
+        val startedAtNanos: Long,
+    )
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "dictate-voice-job")
+    }
+    private val realtimeWorker = Executors.newFixedThreadPool(2) { runnable ->
+        Thread(runnable, "dictate-realtime-session")
     }
     private val scheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "dictate-retry-wait")
@@ -92,6 +155,7 @@ class VoiceJobController(
     private val nextJobId = AtomicLong(0L)
     private val transcoder = AudioTranscoder(application, diagnostics)
     private val client = TranscriptionClient(diagnostics)
+    private val advancedAudioClient = AdvancedAudioClient()
     private val postProcessingClient = PostProcessingClient(diagnostics)
     private var postProcessingMenuListener: ((String, List<PromptConfig>) -> Unit)? = null
     private var selectionRequestId = 0L
@@ -352,12 +416,67 @@ class VoiceJobController(
         return true
     }
 
-    fun onRecordingStarted(jobId: Long, format: Pcm16Format) {
-        mainHandler.post {
-            val job = activeJob?.takeIf { it.id == jobId } ?: return@post
-            job.rawFormat = format
-            diagnostics.info("recording", "job=$jobId started format=${format.summary()}")
+    /**
+     * Called synchronously by [RecordingService] before AudioRecorder starts
+     * sampling. A realtime workflow receives its bounded tee here;
+     * ordinary workflows intentionally keep their existing end-of-recording
+     * settings snapshot behavior.
+     */
+    fun onRecordingStarted(jobId: Long, format: Pcm16Format): PcmPacketSink? {
+        val job = activeJob?.takeIf { it.id == jobId } ?: return null
+        job.rawFormat = format
+        diagnostics.info("recording", "job=$jobId started format=${format.summary()}")
+
+        val runtime = settingsRepository.runtime()
+        val workflow = realtimeWorkflow(runtime) ?: return null
+        val recording = RealtimeRecording(
+            runtime = runtime,
+            workflow = workflow,
+            captureFormat = format,
+            cancellation = AdvancedCancellationSource(),
+        )
+        job.runtimeSettings = runtime
+        job.realtimeRecording = recording
+        job.advancedCancellationSource = recording.cancellation
+        return startRealtimeLiveSegment(job, recording, format)
+    }
+
+    /** The service has closed this segment's tee at a clean PCM pause boundary. */
+    fun onRecordingPaused(jobId: Long) {
+        val job = activeJob?.takeIf { it.id == jobId } ?: return
+        val recording = job.realtimeRecording ?: return
+        recording.activeSegment?.let { segment ->
+            segment.closed = true
+            recording.activeSegment = null
         }
+    }
+
+    /**
+     * Called before AudioRecord resumes. A prior pause must have finished its
+     * websocket finalization before a fresh live session can safely begin.
+     * If it has not, this capture continues locally and is replayed in full
+     * after Stop instead of allowing concurrent live sessions to lose audio.
+     */
+    fun onRecordingResuming(jobId: Long, format: Pcm16Format): PcmPacketSink? {
+        val job = activeJob?.takeIf { it.id == jobId } ?: return null
+        val recording = job.realtimeRecording ?: return null
+        if (recording.captureFormat != format) {
+            markRealtimeLiveFailure(job, recording)
+            return null
+        }
+        if (recording.liveFailed || recording.activeSegment != null ||
+            recording.segments.any { !it.terminal }
+        ) {
+            markRealtimeLiveFailure(job, recording)
+            return null
+        }
+        return startRealtimeLiveSegment(job, recording, format)
+    }
+
+    /** Resume could not start after a new tee was prepared. */
+    fun onRecordingResumeFailed(jobId: Long) {
+        val job = activeJob?.takeIf { it.id == jobId } ?: return
+        job.realtimeRecording?.let { recording -> markRealtimeLiveFailure(job, recording) }
     }
 
     fun onRecordingAmplitude(jobId: Long, amplitude: Float) {
@@ -420,6 +539,21 @@ class VoiceJobController(
             }
             if (uiState.state != JobState.TRANSCODING) {
                 finishFailure(jobId, AppStrings.get(R.string.runtime_state_invalid_preserved, "The recording entered an unexpected state; usable audio was saved"))
+                return@post
+            }
+            job.realtimeRecording?.let { recording ->
+                // AudioRecorder closes its tee before invoking this callback.
+                // The runner can now flush the final converted packet, send
+                // finish, and wait for explicit completion.
+                recording.activeSegment?.let { segment ->
+                    segment.closed = true
+                    recording.activeSegment = null
+                }
+                recording.recordingCompleted = true
+                updateUi(jobId, JobState.REQUESTING) {
+                    AppStrings.get(R.string.runtime_requesting_transcription, "Requesting transcription")
+                }
+                maybeCompleteRealtimeRecording(job, recording)
                 return@post
             }
             job.runtimeSettings = settingsRepository.runtime()
@@ -564,6 +698,20 @@ class VoiceJobController(
             return
         }
 
+        // Realtime workflows always consume the authoritative raw PCM16
+        // recording and its actual AudioRecord format. They must never use a
+        // post-transcode file, including for the connection-test recording.
+        realtimeWorkflow(runtime)?.let {
+            val recording = ensureRealtimeRecording(job, runtime, rawFormat)
+            if (recording == null) {
+                finishFailure(jobId, ADVANCED_REALTIME_FAILURE_MESSAGE)
+            } else {
+                recording.recordingCompleted = true
+                startRealtimeReplay(job, recording)
+            }
+            return
+        }
+
         val plan = AudioEncodingPlan.resolve(runtime.app.audio, rawFormat)
         job.encodingPlan = plan
         diagnostics.info("ffmpeg", "job=$jobId requested=${runtime.app.audio} resolved=${plan.config} layout=${plan.layout.name}")
@@ -593,7 +741,26 @@ class VoiceJobController(
             startPostProcessingRequest(job, runtime)
             return
         }
+        if (runtime.app.advancedAudio.enabled && realtimeWorkflow(runtime) != null) {
+            val rawFormat = job.rawFormat
+            if (rawFormat == null) {
+                finishFailure(jobId, ADVANCED_REALTIME_FAILURE_MESSAGE)
+                return
+            }
+            val recording = ensureRealtimeRecording(job, runtime, rawFormat)
+            if (recording == null) {
+                finishFailure(jobId, ADVANCED_REALTIME_FAILURE_MESSAGE)
+                return
+            }
+            recording.recordingCompleted = true
+            startRealtimeReplay(job, recording)
+            return
+        }
         val output = job.outputFile ?: return
+        if (runtime.app.advancedAudio.enabled) {
+            startAdvancedAudioRequest(job, runtime, output)
+            return
+        }
         val request = try {
             TranscriptionClient.Request(
                 endpoint = BaseUrl.transcriptionEndpoint(runtime.app.provider.baseUrl),
@@ -625,6 +792,296 @@ class VoiceJobController(
                 handleRequestResult(jobId, result)
             }
         }
+    }
+
+    private fun startAdvancedAudioRequest(
+        job: ActiveJob,
+        runtime: RuntimeSettings,
+        output: File,
+    ) {
+        val source = AdvancedCancellationSource()
+        job.advancedCancellationSource = source
+        updateUi(job.id, JobState.REQUESTING) {
+            AppStrings.get(R.string.runtime_requesting_transcription, "Requesting transcription")
+        }
+        val request = AdvancedAudioClient.Request(
+            config = runtime.app.advancedAudio,
+            secrets = runtime.advancedAudioSecrets,
+            audioFile = output,
+            mimeType = requireNotNull(job.encodingPlan).mimeType,
+            retry = runtime.app.retry,
+            onPhase = { phase -> diagnostics.info("advanced-audio", "job=${job.id} $phase") },
+        )
+        job.workerFuture = worker.submit {
+            if (!isCurrent(job.id)) return@submit
+            val result = advancedAudioClient.transcribe(request, source.token)
+            mainHandler.post {
+                if (isCurrent(job.id)) handleAdvancedRequestResult(job.id, result)
+            }
+        }
+    }
+
+    private fun startRealtimeLiveSegment(
+        job: ActiveJob,
+        recording: RealtimeRecording,
+        format: Pcm16Format,
+    ): PcmPacketSink? {
+        if (recording.liveFailed || recording.replayStarted || recording.activeSegment != null) return null
+        val realtime = (recording.workflow.recognition as? RealtimeSessionRecognition)?.realtime ?: run {
+            markRealtimeLiveFailure(job, recording)
+            return null
+        }
+        val segment = RealtimeSegment(PcmCaptureTee(LIVE_REALTIME_TEE_CAPACITY))
+        recording.segments += segment
+        recording.activeSegment = segment
+        try {
+            segment.future = realtimeWorker.submit {
+                val result = runCatching {
+                    RealtimeSessionRunner().run(
+                        workflow = recording.workflow,
+                        values = recording.runtime.app.advancedAudio.values,
+                        secrets = workflowSecrets(recording.runtime, recording.workflow),
+                        runtime = newRealtimeRuntimeValues(),
+                        source = LivePcmTeeSource(segment.tee, format, realtime.audioStream),
+                        cancellation = recording.cancellation.token,
+                    )
+                }
+                mainHandler.post {
+                    handleRealtimeLiveSegmentResult(job.id, recording, segment, result)
+                }
+            }
+        } catch (_: Exception) {
+            // Do not retain a tee without its consumer. Capture continues
+            // locally and will use a complete replay once recording stops.
+            recording.segments.remove(segment)
+            if (recording.activeSegment === segment) recording.activeSegment = null
+            markRealtimeLiveFailure(job, recording)
+            maybeCompleteRealtimeRecording(job, recording)
+            return null
+        }
+        return segment.tee
+    }
+
+    private fun handleRealtimeLiveSegmentResult(
+        jobId: Long,
+        recording: RealtimeRecording,
+        segment: RealtimeSegment,
+        result: Result<RealtimeSessionResult>,
+    ) {
+        val job = activeJob?.takeIf { it.id == jobId && it.realtimeRecording === recording } ?: return
+        segment.terminal = true
+        if (result.isSuccess && !recording.liveFailed) {
+            segment.text = result.getOrThrow().text
+        } else {
+            markRealtimeLiveFailure(job, recording)
+        }
+        maybeCompleteRealtimeRecording(job, recording)
+    }
+
+    private fun markRealtimeLiveFailure(job: ActiveJob, recording: RealtimeRecording) {
+        if (recording.liveFailed) return
+        recording.liveFailed = true
+        recording.segments.forEach { segment -> segment.text = null }
+        recording.activeSegment?.tee?.close()
+        // Every existing session belongs to the same logical recording. Once
+        // one becomes incomplete, none of their partial texts may be used.
+        recording.cancellation.cancel()
+        diagnostics.info("advanced-audio", "job=${job.id} live realtime will replay local PCM")
+    }
+
+    private fun maybeCompleteRealtimeRecording(job: ActiveJob, recording: RealtimeRecording) {
+        if (!recording.recordingCompleted || recording.replayStarted) return
+        if (recording.segments.any { !it.terminal }) return
+
+        if (recording.liveFailed || recording.segments.isEmpty()) {
+            startRealtimeReplay(job, recording)
+            return
+        }
+
+        // Windows preserves provider text exactly when concatenating successful
+        // pause-delimited sessions; no separator is invented at this layer.
+        deliverResult(job.id, recording.segments.joinToString(separator = "") { it.text.orEmpty() })
+    }
+
+    private fun startRealtimeReplay(job: ActiveJob, recording: RealtimeRecording) {
+        if (recording.replayStarted) return
+        val rawFile = job.rawFile ?: run {
+            finishFailure(job.id, ADVANCED_REALTIME_FAILURE_MESSAGE)
+            return
+        }
+        val rawFormat = job.rawFormat ?: run {
+            finishFailure(job.id, ADVANCED_REALTIME_FAILURE_MESSAGE)
+            return
+        }
+        val realtime = (recording.workflow.recognition as? RealtimeSessionRecognition)?.realtime ?: run {
+            finishFailure(job.id, ADVANCED_REALTIME_FAILURE_MESSAGE)
+            return
+        }
+
+        recording.replayStarted = true
+        val replayCancellation = AdvancedCancellationSource()
+        job.advancedCancellationSource = replayCancellation
+        val replay = RealtimeReplayContext(
+            rawFile = rawFile,
+            rawFormat = rawFormat,
+            realtime = realtime,
+            runtime = newRealtimeRuntimeValues(),
+            cancellation = replayCancellation,
+            startedAtNanos = System.nanoTime(),
+        )
+        startRealtimeReplayAttempt(job, recording, replay)
+    }
+
+    /**
+     * Runs one replay attempt. A retry never reuses a consumed PCM source or
+     * an established websocket, so it always begins at byte zero with a clean
+     * transcript accumulator, matching the Windows replay lifecycle.
+     */
+    private fun startRealtimeReplayAttempt(
+        job: ActiveJob,
+        recording: RealtimeRecording,
+        replay: RealtimeReplayContext,
+    ) {
+        val attempt = job.retryCount
+        updateUi(job.id, JobState.REQUESTING) {
+            if (attempt == 0) {
+                AppStrings.get(R.string.runtime_requesting_transcription, "Requesting transcription")
+            } else {
+                AppStrings.get(
+                    R.string.runtime_retrying,
+                    "Retrying %1\$d/%2\$d",
+                    attempt,
+                    recording.runtime.app.retry.maxRetries,
+                )
+            }
+        }
+        try {
+            job.workerFuture = realtimeWorker.submit {
+                if (!isCurrent(job.id) || replayCancellationWasRequested(recording, replay.cancellation)) {
+                    return@submit
+                }
+                val result = runCatching {
+                    RealtimeSessionRunner().run(
+                        workflow = recording.workflow,
+                        values = recording.runtime.app.advancedAudio.values,
+                        secrets = workflowSecrets(recording.runtime, recording.workflow),
+                        runtime = replay.runtime,
+                        source = Pcm16ReplayChunkSource(
+                            replay.rawFile,
+                            replay.realtime.audioStream,
+                            replay.rawFormat,
+                        ),
+                        cancellation = replay.cancellation.token,
+                    )
+                }
+                mainHandler.post {
+                    handleRealtimeReplayResult(job.id, recording, replay, result)
+                }
+            }
+        } catch (_: Exception) {
+            finishFailure(job.id, ADVANCED_REALTIME_FAILURE_MESSAGE)
+        }
+    }
+
+    private fun handleRealtimeReplayResult(
+        jobId: Long,
+        recording: RealtimeRecording,
+        replay: RealtimeReplayContext,
+        result: Result<RealtimeSessionResult>,
+    ) {
+        val job = activeJob?.takeIf { it.id == jobId && it.realtimeRecording === recording } ?: return
+        val elapsedMillis = (System.nanoTime() - replay.startedAtNanos) / NANOS_PER_MILLISECOND
+        if (result.isSuccess) {
+            val text = result.getOrThrow().text
+            if (job.mode.connectionTest) {
+                completeJob(
+                    jobId,
+                    ConnectionTestResult(
+                        success = true,
+                        elapsedMillis = elapsedMillis,
+                        text = sanitizeAdvancedResult(recording.runtime, text),
+                        message = AppStrings.get(R.string.runtime_connection_success, "Connection successful"),
+                    ),
+                )
+            } else {
+                deliverResult(jobId, text)
+            }
+            return
+        }
+
+        val failure = result.exceptionOrNull()
+        if (replayCancellationWasRequested(recording, replay.cancellation) || failure is InterruptedException) return
+        if (scheduleRealtimeReplayRetry(job, recording, replay)) return
+
+        val message = (failure as? com.joeykot.dictate.advanced_audio.realtime.RealtimeSessionException)
+            ?.message
+            ?: ADVANCED_REALTIME_FAILURE_MESSAGE
+        if (job.mode.connectionTest) {
+            completeJob(
+                jobId,
+                ConnectionTestResult(success = false, elapsedMillis = elapsedMillis, message = message),
+            )
+        } else {
+            finishFailure(jobId, message)
+        }
+    }
+
+    /** Schedules the next replay attempt with the shared cancellable job policy. */
+    private fun scheduleRealtimeReplayRetry(
+        job: ActiveJob,
+        recording: RealtimeRecording,
+        replay: RealtimeReplayContext,
+    ): Boolean {
+        val retry = recording.runtime.app.retry
+        if (!retry.enabled || job.retryCount >= retry.maxRetries.coerceAtLeast(0)) return false
+
+        val retryNumber = job.retryCount + 1
+        val delay = retry.delayMillis(retryNumber)
+        job.retryCount = retryNumber
+        updateUi(job.id, JobState.RETRY_WAITING) {
+            AppStrings.get(
+                R.string.runtime_retry_wait,
+                "Retry %1\$d/%2\$d, continuing in %3\$s",
+                retryNumber,
+                retry.maxRetries,
+                formatDelay(delay),
+            )
+        }
+        return try {
+            job.retryFuture = scheduler.schedule(
+                {
+                    mainHandler.post {
+                        val current = activeJob?.takeIf {
+                            it.id == job.id && it.realtimeRecording === recording
+                        } ?: return@post
+                        if (!replayCancellationWasRequested(recording, replay.cancellation)) {
+                            startRealtimeReplayAttempt(current, recording, replay)
+                        }
+                    }
+                },
+                delay,
+                TimeUnit.MILLISECONDS,
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun replayCancellationWasRequested(
+        recording: RealtimeRecording,
+        replayCancellation: AdvancedCancellationSource,
+    ): Boolean =
+        replayCancellation.token.isCancelled() ||
+            recording.cancellation.token.isCancelled() && !recording.liveFailed
+
+    private fun newRealtimeRuntimeValues(): RuntimeTemplateValues {
+        val now = Instant.now()
+        return RuntimeTemplateValues(
+            uuid = UUID.randomUUID().toString(),
+            unixSeconds = now.epochSecond.toString(),
+            unixMillis = now.toEpochMilli().toString(),
+        )
     }
 
     private fun startPostProcessingRequest(job: ActiveJob, runtime: RuntimeSettings) {
@@ -720,6 +1177,53 @@ class VoiceJobController(
                 }
             }
             TranscriptionClient.Result.Cancelled -> Unit
+        }
+    }
+
+    /**
+     * Advanced workflows own their phase-level retry policy. In particular,
+     * an async submit must never be replayed by the legacy whole-job retry
+     * loop after an ambiguous network failure.
+     */
+    private fun handleAdvancedRequestResult(jobId: Long, result: AdvancedAudioClient.Result) {
+        val job = activeJob?.takeIf { it.id == jobId } ?: return
+        val runtime = job.runtimeSettings ?: return
+        when (result) {
+            is AdvancedAudioClient.Result.Success -> {
+                if (job.mode.connectionTest) {
+                    completeJob(
+                        jobId,
+                        ConnectionTestResult(
+                            success = true,
+                            statusCode = result.statusCode,
+                            elapsedMillis = result.elapsedMillis,
+                            text = sanitizeAdvancedResult(runtime, result.text),
+                            message = AppStrings.get(R.string.runtime_connection_success, "Connection successful"),
+                        ),
+                    )
+                } else {
+                    deliverResult(jobId, result.text)
+                }
+            }
+
+            is AdvancedAudioClient.Result.Failure -> {
+                val message = sanitizeAdvancedResult(runtime, result.message)
+                if (job.mode.connectionTest) {
+                    completeJob(
+                        jobId,
+                        ConnectionTestResult(
+                            success = false,
+                            statusCode = result.statusCode,
+                            elapsedMillis = result.elapsedMillis,
+                            message = message,
+                        ),
+                    )
+                } else {
+                    finishFailure(jobId, message)
+                }
+            }
+
+            is AdvancedAudioClient.Result.Cancelled -> Unit
         }
     }
 
@@ -822,6 +1326,8 @@ class VoiceJobController(
         updateUi(null, JobState.IDLE) { AppStrings.get(R.string.runtime_task_cancelled, "Task cancelled") }
 
         job.retryFuture?.cancel(true)
+        cancelRealtimeRecording(job)
+        job.advancedCancellationSource?.cancel()
 
         when (stateAtCancellation) {
             JobState.RECORDING,
@@ -871,6 +1377,8 @@ class VoiceJobController(
 
     private fun abortRecorderWithPreservation(job: ActiveJob, message: String) {
         pendingPreserveAfterRecorderStops.add(job.id)
+        cancelRealtimeRecording(job)
+        job.advancedCancellationSource?.cancel()
         activeJob = null
         updateUi(null, JobUiState(JobState.IDLE, message))
         val delivered = runCatching {
@@ -884,6 +1392,8 @@ class VoiceJobController(
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         diagnostics.error("job", "job=$jobId state=${uiState.state} $message")
         job.retryFuture?.cancel(true)
+        cancelRealtimeRecording(job)
+        job.advancedCancellationSource?.cancel()
         job.outputFile?.delete()
         if (job.mode.connectionTest) job.rawFile?.delete()
         activeJob = null
@@ -898,6 +1408,8 @@ class VoiceJobController(
     private fun completeJob(jobId: Long, testResult: ConnectionTestResult? = null) {
         val job = activeJob?.takeIf { it.id == jobId } ?: return
         job.retryFuture?.cancel(false)
+        cancelRealtimeRecording(job)
+        job.advancedCancellationSource?.cancel()
         job.outputFile?.delete()
         if (job.mode.connectionTest) job.rawFile?.delete()
         activeJob = null
@@ -937,8 +1449,68 @@ class VoiceJobController(
         return fileStore.isValidRaw(rawFile, format)
     }
 
+    private fun realtimeWorkflow(runtime: RuntimeSettings): AdvancedAudioWorkflow? {
+        if (!runtime.app.advancedAudio.enabled) return null
+        val document = runtime.app.advancedAudio.workflowJson?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { AdvancedAudioWorkflowCodec.parse(document) }
+            .getOrNull()
+            ?.takeIf { it.recognition is RealtimeSessionRecognition }
+    }
+
+    private fun ensureRealtimeRecording(
+        job: ActiveJob,
+        runtime: RuntimeSettings,
+        captureFormat: Pcm16Format,
+    ): RealtimeRecording? {
+        job.realtimeRecording?.let { return it }
+        val workflow = realtimeWorkflow(runtime) ?: return null
+        return RealtimeRecording(
+            runtime = runtime,
+            workflow = workflow,
+            captureFormat = captureFormat,
+            cancellation = AdvancedCancellationSource(),
+        ).also { recording ->
+            job.realtimeRecording = recording
+            job.advancedCancellationSource = recording.cancellation
+        }
+    }
+
+    private fun cancelRealtimeRecording(job: ActiveJob) {
+        val recording = job.realtimeRecording ?: return
+        recording.liveFailed = true
+        recording.segments.forEach { segment -> segment.text = null }
+        recording.activeSegment?.tee?.close()
+        recording.cancellation.cancel()
+    }
+
     private fun validateRuntimeSettings(runtime: RuntimeSettings): String? {
         val errors = (runtime.app.audio.validate() + runtime.app.retry.validate()).toMutableList()
+        if (runtime.app.advancedAudio.enabled) {
+            val config = runtime.app.advancedAudio
+            val document = config.workflowJson?.trim().takeIf { !it.isNullOrEmpty() }
+            if (document == null) {
+                errors += "ADVANCED_AUDIO_API.workflow: is required when Advanced Audio API is enabled"
+                return errors.firstOrNull()
+            }
+            val workflow = try {
+                AdvancedAudioWorkflowCodec.parse(document)
+            } catch (error: IllegalArgumentException) {
+                errors += "ADVANCED_AUDIO_API.workflow: ${error.message ?: "is invalid"}"
+                return errors.firstOrNull()
+            }
+            val workflowSecrets = workflowSecrets(runtime, workflow)
+            errors += WorkflowValidator.validateExecutionInputs(
+                workflow = workflow,
+                values = config.values,
+                secrets = workflowSecrets,
+            ).map { it.toString() }
+            errors += RemoteAudioConfigValidator.validate(
+                config = config.remoteAudio,
+                delivery = workflow.audio.delivery,
+                secrets = runtime.advancedAudioSecrets,
+            ).map { it.toString() }
+            return errors.firstOrNull()
+        }
         if (runtime.app.provider.baseUrl.isBlank()) errors.add(AppStrings.get(R.string.runtime_base_url_required, "Base URL must not be empty"))
         if (runtime.apiKey.isBlank()) errors.add(AppStrings.get(R.string.runtime_api_key_required, "API Key must not be empty"))
         try {
@@ -951,6 +1523,20 @@ class VoiceJobController(
             errors.add(error.message ?: AppStrings.get(R.string.runtime_invalid_transcription, "Invalid transcription parameters"))
         }
         return errors.firstOrNull()
+    }
+
+    private fun sanitizeAdvancedResult(runtime: RuntimeSettings, value: String): String =
+        diagnostics.sanitize(value, secrets = runtime.advancedAudioSecrets.values)
+
+    /** Remote-storage credentials are never available to a workflow template. */
+    private fun workflowSecrets(
+        runtime: RuntimeSettings,
+        workflow: AdvancedAudioWorkflow,
+    ): Map<String, String> {
+        val remoteCredentialIds = RemoteAudioCredentialIds.forConfig(runtime.app.advancedAudio.remoteAudio)
+        return runtime.advancedAudioSecrets.filterKeys { id ->
+            id !in remoteCredentialIds && workflow.secrets.any { it.id == id }
+        }
     }
 
     private fun isCurrent(jobId: Long): Boolean = activeJob?.id == jobId
@@ -986,6 +1572,9 @@ class VoiceJobController(
 
     private companion object {
         const val AMPLITUDE_INTERVAL_MS = 80L
+        const val LIVE_REALTIME_TEE_CAPACITY = 128
+        const val NANOS_PER_MILLISECOND = 1_000_000L
+        const val ADVANCED_REALTIME_FAILURE_MESSAGE = "Realtime transcription failed"
     }
 }
 

@@ -1,0 +1,66 @@
+{
+  "schema_version": 2,
+  "name": "SSE transcription stream",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "streaming-asr",
+      "type": "text"
+    }
+  ],
+  "secrets": [
+    {
+      "id": "api_key",
+      "label": "API key",
+      "required": true
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    }
+  },
+  "recognition": {
+    "mode": "request_stream",
+    "request": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/stream",
+      "headers": {
+        "Authorization": "Bearer {{secret:api_key}}"
+      },
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "audio": "{{audio:base64}}"
+        }
+      },
+      "captures": [
+        {
+          "id": "request_id",
+          "from": {
+            "type": "header",
+            "name": "X-Request-Id"
+          }
+        }
+      ]
+    },
+    "stream": {
+      "format": "sse",
+      "rules": [
+        {
+          "event": "transcript",
+          "path": "$.delta",
+          "action": "append_delta"
+        },
+        {
+          "event": "completed",
+          "path": "$.status",
+          "action": "complete",
+          "equals": "completed"
+        }
+      ]
+    }
+  }
+}

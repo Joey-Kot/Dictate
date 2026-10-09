@@ -1,0 +1,40 @@
+{
+  "enabled": false,
+  "workflow": {
+    "schema_version": 99,
+    "name": "Retained unsupported draft",
+    "parameters": [],
+    "secrets": [],
+    "audio": {
+      "delivery": {
+        "type": "base64"
+      }
+    },
+    "recognition": {
+      "mode": "request",
+      "request": {
+        "method": "POST",
+        "url": "https://asr.example.test/v1/transcriptions",
+        "body": {
+          "type": "json",
+          "value": {
+            "audio": "{{audio:base64}}"
+          }
+        }
+      },
+      "final_text": {
+        "type": "json_path",
+        "path": "$.text"
+      }
+    }
+  },
+  "values": {
+    "leftover": "kept only while disabled"
+  },
+  "secrets": {
+    "leftover_secret": "test-only-placeholder"
+  },
+  "remote_audio": {
+    "type": "none"
+  }
+}

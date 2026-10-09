@@ -1,0 +1,73 @@
+{
+  "schema_version": 2,
+  "name": "Poll must not resend an audio representation",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "asr",
+      "type": "text"
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    }
+  },
+  "recognition": {
+    "mode": "async_poll",
+    "submit": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/tasks",
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "audio": "{{audio:base64}}"
+        }
+      }
+    },
+    "poll": {
+      "request": {
+        "method": "GET",
+        "url": "https://asr.example.test/v1/tasks/current",
+        "query": {
+          "audio": "{{audio:base64}}"
+        }
+      },
+      "interval_ms": 1000,
+      "timeout_ms": 600000,
+      "pending": [
+        {
+          "from": {
+            "type": "status"
+          },
+          "operator": "eq",
+          "value": "202"
+        }
+      ],
+      "success": [
+        {
+          "from": {
+            "type": "status"
+          },
+          "operator": "eq",
+          "value": "200"
+        }
+      ],
+      "failure": [
+        {
+          "from": {
+            "type": "status"
+          },
+          "operator": "eq",
+          "value": "400"
+        }
+      ]
+    },
+    "result_steps": [],
+    "final_text": {
+      "type": "plain_body"
+    }
+  }
+}

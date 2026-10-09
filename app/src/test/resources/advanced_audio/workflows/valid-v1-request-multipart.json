@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "name": "Legacy multipart request",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "required": true,
+      "default": "whisper-1"
+    },
+    {
+      "id": "language",
+      "label": "Language",
+      "default": "zh"
+    }
+  ],
+  "secrets": [
+    {
+      "id": "api_key",
+      "label": "API key",
+      "required": true
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "multipart_file"
+    },
+    "mime": "audio/wav"
+  },
+  "recognition": {
+    "mode": "request",
+    "request": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/transcriptions",
+      "headers": {
+        "Authorization": "Bearer {{secret:api_key}}"
+      },
+      "body": {
+        "type": "multipart",
+        "fields": [
+          {
+            "name": "file",
+            "type": "audio_file"
+          },
+          {
+            "name": "model",
+            "type": "text",
+            "value": "{{var:model}}"
+          },
+          {
+            "name": "language",
+            "type": "text",
+            "value": "{{var:language}}"
+          }
+        ]
+      },
+      "accepted_statuses": [
+        200
+      ]
+    },
+    "final_text": {
+      "type": "json_path",
+      "path": "$.text"
+    }
+  }
+}

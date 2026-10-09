@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "name": "Version two requires parameter types",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "asr"
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    }
+  },
+  "recognition": {
+    "mode": "request",
+    "request": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/transcriptions",
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "audio": "{{audio:base64}}"
+        }
+      }
+    },
+    "final_text": {
+      "type": "json_path",
+      "path": "$.text"
+    }
+  }
+}

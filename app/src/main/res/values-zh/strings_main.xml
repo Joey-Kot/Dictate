@@ -7,6 +7,7 @@
     <string name="main_audio_section">录音设置</string>
     <string name="main_provider_section">音频 API 设置</string>
     <string name="main_post_processing_section">改写 API 设置</string>
+    <string name="main_advanced_audio_section">高级音频 API 设置</string>
     <string name="main_retry_section">重试设置</string>
     <string name="main_interaction_section">交互设置</string>
     <string name="main_display_section">显示设置</string>

@@ -1,0 +1,163 @@
+{
+  "corpus_version": 1,
+  "scope": "Windows Advanced Audio API Workflow schema v1 and v2 compatibility.",
+  "workflow_cases": [
+    {
+      "id": "valid_v1_request_multipart",
+      "path": "workflows/valid-v1-request-multipart.json",
+      "operation": "validate_workflow",
+      "expected": "valid"
+    },
+    {
+      "id": "valid_v2_typed_request",
+      "path": "workflows/valid-v2-typed-request.json",
+      "operation": "validate_workflow",
+      "expected": "valid"
+    },
+    {
+      "id": "valid_v2_request_stream_sse",
+      "path": "workflows/valid-v2-request-stream-sse.json",
+      "operation": "validate_workflow",
+      "expected": "valid"
+    },
+    {
+      "id": "valid_v2_async_poll_provider_upload",
+      "path": "workflows/valid-v2-async-poll-provider-upload.json",
+      "operation": "validate_workflow",
+      "expected": "valid"
+    },
+    {
+      "id": "valid_v2_realtime_websocket",
+      "path": "workflows/valid-v2-realtime-websocket.json",
+      "operation": "validate_workflow",
+      "expected": "valid"
+    },
+    {
+      "id": "invalid_v1_typed_parameter",
+      "path": "validation/invalid-v1-typed-parameter.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "parameters[0].type",
+        "is only supported by workflow schema version 2"
+      ]
+    },
+    {
+      "id": "invalid_v2_missing_type",
+      "path": "validation/invalid-v2-missing-type.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "parameters[0].type",
+        "is required for workflow schema version 2"
+      ]
+    },
+    {
+      "id": "invalid_unknown_schema_version",
+      "path": "validation/invalid-unknown-schema-version.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "Unsupported Workflow Schema Version 99"
+      ]
+    },
+    {
+      "id": "invalid_unsafe_template",
+      "path": "validation/invalid-unsafe-template.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "unknown template namespace 'env'"
+      ]
+    },
+    {
+      "id": "invalid_future_capture",
+      "path": "validation/invalid-future-capture.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "references capture 'job_id' before it is created"
+      ]
+    },
+    {
+      "id": "invalid_capture_only_url_suffix",
+      "path": "validation/invalid-dynamic-result-url-suffix.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "recognition.result_steps[0].url",
+        "must start with one of http, https://"
+      ]
+    },
+    {
+      "id": "invalid_poll_audio_reference",
+      "path": "validation/invalid-poll-audio-reference.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "recognition.poll.request",
+        "poll requests must not resend audio or an audio reference"
+      ]
+    },
+    {
+      "id": "invalid_visible_when_later_source",
+      "path": "validation/invalid-visible-when-later-source.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "parameters[0].visible_when.parameter",
+        "must reference an earlier unconditional boolean or select parameter"
+      ]
+    },
+    {
+      "id": "invalid_realtime_audio_outside_chunk",
+      "path": "validation/invalid-realtime-audio-outside-chunk.json",
+      "operation": "validate_workflow",
+      "expected": "invalid",
+      "error_contains": [
+        "recognition.realtime.connect.query.filename",
+        "{{audio:filename}} is incompatible with this audio delivery"
+      ]
+    }
+  ],
+  "config_cases": [
+    {
+      "id": "valid_disabled_inert_draft",
+      "path": "config/valid-disabled-inert-draft.json",
+      "operation": "validate_advanced_config",
+      "expected": "valid",
+      "note": "Its nested workflow is intentionally unsupported; disabled Advanced settings are inert."
+    },
+    {
+      "id": "invalid_hidden_required_missing",
+      "path": "config/invalid-hidden-required-missing.json",
+      "operation": "validate_advanced_config",
+      "expected": "invalid",
+      "error_contains": [
+        "ADVANCED_AUDIO_API.values.custom_vocabulary",
+        "required value is missing"
+      ]
+    }
+  ],
+  "template_cases": {
+    "path": "templates/cases.json",
+    "operations": [
+      "parse_template",
+      "render_template"
+    ]
+  },
+  "typed_rendering_cases": [
+    {
+      "path": "typed_rendering/v1-text-only-leaf.json",
+      "operation": "render_json_template"
+    },
+    {
+      "path": "typed_rendering/v2-native-json-leaves.json",
+      "operation": "render_json_template"
+    },
+    {
+      "path": "typed_rendering/v2-structured-string-context-rejections.json",
+      "operation": "validate_and_render_typed_values"
+    }
+  ]
+}

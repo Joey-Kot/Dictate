@@ -7,6 +7,7 @@
     <string name="main_audio_section">Paramètres d’enregistrement audio</string>
     <string name="main_provider_section">Paramètres de l’API audio</string>
     <string name="main_post_processing_section">Paramètres de l’API de reformulation</string>
+    <string name="main_advanced_audio_section">Paramètres de l’API audio avancée</string>
     <string name="main_retry_section">Paramètres des nouvelles tentatives</string>
     <string name="main_interaction_section">Paramètres d’interaction</string>
     <string name="main_display_section">Paramètres d’affichage</string>

@@ -95,6 +95,25 @@ android {
     }
 }
 
+val ffmpegBuildScript = rootProject.layout.projectDirectory.file("scripts/build-android-ffmpeg.sh")
+val debugFfmpegBinary = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libffmpeg.so")
+
+/**
+ * A Debug APK is intended for device testing, so its bundled FFmpeg CLI must
+ * be available. Gradle treats the generated binary as the task output: an
+ * unchanged, already-built binary is reused, while a missing binary or a
+ * changed build script invokes the existing native build script.
+ */
+val buildDebugFfmpeg by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Builds the arm64 FFmpeg CLI required by Debug APKs."
+    inputs.file(ffmpegBuildScript)
+    outputs.file(debugFfmpegBinary)
+    workingDir(rootProject.projectDir)
+    executable = "bash"
+    args(ffmpegBuildScript.asFile.absolutePath)
+}
+
 val verifyFfmpegBinary by tasks.registering {
     group = "verification"
     description = "Checks that the arm64 FFmpeg CLI binary is present for release packaging."
@@ -111,8 +130,20 @@ tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn(verifyFfmpegBinary)
 }
 
+// Keep lint and JVM unit tests free of native toolchain work. Packaging a
+// Debug APK, however, must first create the executable it ships to devices.
+tasks.matching { it.name == "mergeDebugJniLibFolders" }.configureEach {
+    dependsOn(buildDebugFfmpeg)
+}
+
 dependencies {
     implementation("com.caverock:androidsvg-aar:1.4")
+    // Advanced Audio API uses one shared client for HTTP and WebSocket work.
+    // The legacy HttpURLConnection clients intentionally remain unchanged.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // JSONPath match/search must use a linear-time engine because workflows
+    // may contain vendor-provided regular expressions.
+    implementation("com.google.re2j:re2j:1.8")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

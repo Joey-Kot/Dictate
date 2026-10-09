@@ -1,0 +1,97 @@
+{
+  "render_cases": [
+    {
+      "id": "all-fixed-namespaces",
+      "template": "model={{var:model}};token={{secret:api_key}};job={{capture:job_id}};file={{audio:filename}};mime={{audio:mime}};size={{audio:size}};base64={{audio:base64}};data={{audio:data_uri}};public={{audio:public_url}};cloud={{audio:cloud_uri}};chunk={{audio:chunk_base64}};uuid={{runtime:uuid}};seconds={{runtime:unix_seconds}};millis={{runtime:unix_millis}}",
+      "context": {
+        "values": {
+          "model": "qwen"
+        },
+        "secrets": {
+          "api_key": "test-api-key"
+        },
+        "captures": {
+          "job_id": "job-42"
+        },
+        "audio": {
+          "filename": "recording.wav",
+          "mime": "audio/wav",
+          "size": "1024",
+          "base64": "YWJj",
+          "data_uri": "data:audio/wav;base64,YWJj",
+          "public_url": "https://cdn.example.test/recording.wav",
+          "cloud_uri": "s3://audio-bucket/recording.wav",
+          "chunk_base64": "AQID"
+        },
+        "runtime": {
+          "uuid": "run-1",
+          "unix_seconds": "1700000000",
+          "unix_millis": "1700000000123"
+        }
+      },
+      "expected": "model=qwen;token=test-api-key;job=job-42;file=recording.wav;mime=audio/wav;size=1024;base64=YWJj;data=data:audio/wav;base64,YWJj;public=https://cdn.example.test/recording.wav;cloud=s3://audio-bucket/recording.wav;chunk=AQID;uuid=run-1;seconds=1700000000;millis=1700000000123"
+    },
+    {
+      "id": "missing-runtime-value",
+      "template": "Bearer {{secret:api_key}}",
+      "context": {
+        "values": {},
+        "secrets": {},
+        "captures": {},
+        "audio": {},
+        "runtime": {}
+      },
+      "expected_error": {
+        "kind": "missing_value",
+        "placeholder": "{{secret:api_key}}"
+      }
+    }
+  ],
+  "parse_rejection_cases": [
+    {
+      "id": "unknown_namespace",
+      "template": "{{env:HOME}}",
+      "expected_error": {
+        "kind": "unknown_namespace",
+        "namespace": "env"
+      }
+    },
+    {
+      "id": "unknown_fixed_audio_placeholder",
+      "template": "{{audio:path}}",
+      "expected_error": {
+        "kind": "unknown_fixed_placeholder",
+        "namespace": "audio",
+        "key": "path"
+      }
+    },
+    {
+      "id": "expression_is_not_a_placeholder",
+      "template": "{{var:model + 1}}",
+      "expected_error": {
+        "kind": "invalid_placeholder"
+      }
+    },
+    {
+      "id": "invalid_identifier",
+      "template": "{{var:bad-id}}",
+      "expected_error": {
+        "kind": "invalid_placeholder"
+      }
+    },
+    {
+      "id": "unterminated_placeholder",
+      "template": "{{var:model",
+      "expected_error": {
+        "kind": "unterminated"
+      }
+    },
+    {
+      "id": "unexpected_close",
+      "template": "literal }}",
+      "expected_error": {
+        "kind": "unexpected_close"
+      }
+    }
+  ]
+}

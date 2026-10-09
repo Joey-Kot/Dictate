@@ -39,6 +39,7 @@ import com.joeykot.dictate.R
 import com.joeykot.dictate.i18n.AppLocale
 import com.joeykot.dictate.i18n.AppStrings
 import com.joeykot.dictate.accessibility.DictateAccessibilityService
+import com.joeykot.dictate.advanced_audio.AdvancedAudioWorkflowGenerator
 import com.joeykot.dictate.audio.RecordingService
 import com.joeykot.dictate.model.AppSettings
 import com.joeykot.dictate.model.AppLanguage
@@ -58,6 +59,8 @@ import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
 @SuppressLint("SetTextI18n")
@@ -91,6 +94,7 @@ class MainActivity : Activity() {
     private lateinit var testButton: Button
     private lateinit var testResult: TextView
     private lateinit var postProcessingSection: PostProcessingSettingsView
+    private lateinit var advancedAudioSection: AdvancedAudioSettingsView
     private var pendingIconEditorId: String? = null
     private var editorStateSaved = false
 
@@ -122,7 +126,10 @@ class MainActivity : Activity() {
     private val settingsExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "dictate-settings-save")
     }
+    private val advancedWorkflowGenerator by lazy { AdvancedAudioWorkflowGenerator(app.diagnostics) }
+    private val advancedWorkflowGenerationCancellation = AtomicReference<AtomicBoolean?>(null)
     private var settingsWriteInProgress = false
+    @Volatile
     private var activityDestroyed = false
 
     private data class ColorEditor(
@@ -172,6 +179,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         activityDestroyed = true
+        advancedWorkflowGenerationCancellation.getAndSet(null)?.set(true)
         if (::postProcessingSection.isInitialized) {
             postProcessingSection.closeEditor(preserveDraft = isChangingConfigurations || (editorStateSaved && !isFinishing))
         }
@@ -265,6 +273,30 @@ class MainActivity : Activity() {
             cancelPromptTest = app.voiceJobController::cancelPromptConnectionTest,
         )
         root.addView(postProcessingSection)
+        root.addView(sectionTitle(getString(R.string.main_advanced_audio_section)))
+        advancedAudioSection = AdvancedAudioSettingsView(
+            activity = this,
+            callbacks = object : AdvancedAudioSettingsView.Callbacks() {
+                override fun onGenerateWorkflow(
+                    request: AdvancedAudioSettingsView.WorkflowGenerationRequest,
+                    completion: (Result<String>) -> Unit,
+                ) {
+                    generateAdvancedWorkflow(request, completion)
+                }
+
+                override fun onTestWorkflow(
+                    request: AdvancedAudioSettingsView.WorkflowTestRequest,
+                    completion: (AdvancedAudioSettingsView.WorkflowTestResult) -> Unit,
+                ) {
+                    testAdvancedWorkflow(request, completion)
+                }
+
+                override fun onGenerationCancelled() {
+                    cancelAdvancedWorkflowGeneration()
+                }
+            },
+        )
+        root.addView(advancedAudioSection)
         root.addView(sectionTitle(getString(R.string.main_retry_section)))
         root.addView(buildRetrySection())
         root.addView(sectionTitle(getString(R.string.main_interaction_section)))
@@ -645,6 +677,7 @@ class MainActivity : Activity() {
         modelInput.setText(settings.provider.model)
         additionalJsonInput.setText(settings.provider.additionalJson)
         postProcessingSection.load(settings.postProcessing, settingsRepository.runtime().postProcessingApiKey)
+        advancedAudioSection.load(settings.advancedAudio, settingsRepository.advancedAudioSecrets())
         retryEnabled.isChecked = settings.retry.enabled
         maxRetriesInput.setText(settings.retry.maxRetries.toString())
         initialBackoffInput.setText(settings.retry.initialBackoffSeconds.toString())
@@ -665,6 +698,8 @@ class MainActivity : Activity() {
         val codec = AudioCodec.entries[codecSpinner.selectedItemPosition]
         val container = displayedContainers.getOrNull(containerSpinner.selectedItemPosition)
             ?: AudioConfig.defaultContainer(codec)
+        val advancedAudioConfig = advancedAudioSection.readConfig()
+        val advancedAudioSecrets = advancedAudioSection.readSecrets()
         val settings = AppSettings(
             language = AppLanguage.entries.getOrElse(languageSpinner.selectedItemPosition) { AppLanguage.ENGLISH },
             audio = AudioConfig(
@@ -681,6 +716,7 @@ class MainActivity : Activity() {
                 additionalJson = additionalJsonInput.text.toString().trim(),
             ),
             postProcessing = postProcessingSection.readConfig(),
+            advancedAudio = advancedAudioConfig,
             retry = RetryConfig(
                 enabled = retryEnabled.isChecked,
                 maxRetries = maxRetriesInput.text.toString().toIntOrNull()
@@ -702,15 +738,24 @@ class MainActivity : Activity() {
                 customPalette = customPaletteDraft,
             ),
         )
-        val errors = settingsRepository.validate(settings)
+        val errors = settingsRepository.validate(settings, advancedAudioSecrets)
         if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("\n"))
-        return RuntimeSettings(settings, apiKeyInput.text.toString().trim(), postProcessingSection.readApiKey())
+        return RuntimeSettings(
+            app = settings,
+            apiKey = apiKeyInput.text.toString().trim(),
+            postProcessingApiKey = postProcessingSection.readApiKey(),
+            advancedAudioSecrets = advancedAudioSecrets,
+        )
     }
 
     private fun saveSettings(
         showConfirmation: Boolean,
         onSaved: () -> Unit = {},
     ): Boolean {
+        if (advancedAudioSection.isGenerationInProgress()) {
+            toast(getString(R.string.advanced_audio_generating))
+            return false
+        }
         val runtime = try {
             readRuntimeSettings()
         } catch (error: Exception) {
@@ -722,7 +767,12 @@ class MainActivity : Activity() {
                 val settings = runtime.app.copy(postProcessing = runtime.app.postProcessing.copy(
                     prompts = settingsRepository.get().postProcessing.prompts,
                 ))
-                settingsRepository.save(settings, runtime.apiKey, runtime.postProcessingApiKey)
+                settingsRepository.save(
+                    settings,
+                    runtime.apiKey,
+                    runtime.postProcessingApiKey,
+                    advancedAudioSecrets = runtime.advancedAudioSecrets,
+                )
             },
             onSuccess = {
                 app.voiceJobController.refreshLanguage()
@@ -792,6 +842,86 @@ class MainActivity : Activity() {
             }
         }
         if (!accepted) testButton.isEnabled = true
+    }
+
+    private fun generateAdvancedWorkflow(
+        request: AdvancedAudioSettingsView.WorkflowGenerationRequest,
+        completion: (Result<String>) -> Unit,
+    ) {
+        val rewriteConfig = try {
+            postProcessingSection.readConfig()
+        } catch (error: Exception) {
+            completion(Result.failure(error))
+            return
+        }
+        val rewriteApiKey = postProcessingSection.readApiKey()
+        val cancellation = AtomicBoolean(false)
+        advancedWorkflowGenerationCancellation.getAndSet(cancellation)?.set(true)
+        try {
+            settingsExecutor.execute {
+                val result = advancedWorkflowGenerator.generate(
+                    config = rewriteConfig,
+                    apiKey = rewriteApiKey,
+                    userRequirements = request.userRequirements,
+                    vendorMaterial = request.vendorMaterial,
+                    shouldContinue = { !activityDestroyed && !cancellation.get() },
+                )
+                mainHandler.post {
+                    advancedWorkflowGenerationCancellation.compareAndSet(cancellation, null)
+                    if (!activityDestroyed && !cancellation.get()) completion(result)
+                }
+            }
+        } catch (error: RejectedExecutionException) {
+            advancedWorkflowGenerationCancellation.compareAndSet(cancellation, null)
+            completion(Result.failure(error))
+        }
+    }
+
+    private fun cancelAdvancedWorkflowGeneration() {
+        advancedWorkflowGenerationCancellation.getAndSet(null)?.set(true)
+    }
+
+    private fun testAdvancedWorkflow(
+        request: AdvancedAudioSettingsView.WorkflowTestRequest,
+        completion: (AdvancedAudioSettingsView.WorkflowTestResult) -> Unit,
+    ) {
+        val runtime = try {
+            val current = readRuntimeSettings()
+            val candidate = current.copy(
+                app = current.app.copy(advancedAudio = request.config.copy(enabled = true)),
+                advancedAudioSecrets = request.secrets,
+            )
+            val errors = settingsRepository.validate(candidate.app, candidate.advancedAudioSecrets)
+            require(errors.isEmpty()) { errors.joinToString("\n") }
+            candidate
+        } catch (error: Exception) {
+            completion(
+                AdvancedAudioSettingsView.WorkflowTestResult(
+                    success = false,
+                    message = AdvancedAudioWorkflowGenerator.sanitizeForDisplay(
+                        error.message ?: error.javaClass.simpleName,
+                        request.secrets.values,
+                    ),
+                ),
+            )
+            return
+        }
+
+        app.voiceJobController.testConnection(runtime) { result ->
+            val summary = buildList {
+                result.statusCode?.let { add(getString(R.string.main_test_http, it)) }
+                result.elapsedMillis?.let { add(getString(R.string.main_test_elapsed, it)) }
+                if (!result.success && result.message.isNotBlank()) {
+                    add(
+                        AdvancedAudioWorkflowGenerator.sanitizeForDisplay(
+                            result.message,
+                            request.secrets.values,
+                        ),
+                    )
+                }
+            }.joinToString("\n")
+            completion(AdvancedAudioSettingsView.WorkflowTestResult(result.success, summary))
+        }
     }
 
     private fun updateAudioLinkage(
@@ -923,6 +1053,9 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun beginImport() {
+        // Selecting an import means its eventual configuration must be the
+        // next draft visible here; do not let a generation complete over it.
+        advancedAudioSection.cancelPendingOperations()
         startActivityForResult(
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -944,6 +1077,9 @@ class MainActivity : Activity() {
     }
 
     private fun importFrom(uri: Uri) {
+        // Import replaces the whole form, so no generated or test result may
+        // later write into the imported draft.
+        advancedAudioSection.cancelPendingOperations()
         try {
             val json = contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
                 val content = reader.readText()

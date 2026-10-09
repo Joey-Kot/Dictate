@@ -15,6 +15,9 @@ Dictate is licensed under `GPL-3.0-or-later`. Runtime, build-only, and test-only
 | CMU Flite `cmu_us_slt` voice | `2.2` | Source voice for the packaged synthetic connectivity-test clip | <https://github.com/festvox/flite> | CMU permissive notice | [`CMU-Flite.txt`](THIRD_PARTY_LICENSES/CMU-Flite.txt) | No Flite code or voice database is packaged. The word “test” was rendered to 16 kHz mono PCM by `scripts/generate-connectivity-test-audio.sh`; the reference asset used Ubuntu Flite `2.2-6build3` through FFmpeg `6.1.1-3ubuntu5`. |
 | Kotlin standard library | `2.1.10` | Kotlin runtime packaged in the APK | <https://kotlinlang.org/> | `Apache-2.0` | [`Apache-2.0.txt`](THIRD_PARTY_LICENSES/Apache-2.0.txt) | Unmodified. |
 | AndroidSVG | `1.4` | Rendering user-imported SVG prompt icons | <https://bigbadaboom.github.io/androidsvg/> | `Apache-2.0` | [`Apache-2.0.txt`](THIRD_PARTY_LICENSES/Apache-2.0.txt) | Unmodified `com.caverock:androidsvg-aar` dependency. |
+| OkHttp | `4.12.0` | Advanced Audio API HTTP and WebSocket transport | <https://square.github.io/okhttp/> | `Apache-2.0` | [`Apache-2.0.txt`](THIRD_PARTY_LICENSES/Apache-2.0.txt) | Unmodified `com.squareup.okhttp3:okhttp` dependency. |
+| Okio | `3.6.0` | Byte streams used by OkHttp | <https://square.github.io/okio/> | `Apache-2.0` | [`Apache-2.0.txt`](THIRD_PARTY_LICENSES/Apache-2.0.txt) | Transitive runtime dependency of OkHttp; unmodified. |
+| RE2/J | `1.8` | Linear-time JSONPath `match` / `search` regular-expression engine | <https://github.com/google/re2j> | `BSD-3-Clause` | [`RE2J-BSD-3-Clause.txt`](THIRD_PARTY_LICENSES/RE2J-BSD-3-Clause.txt) | Unmodified `com.google.re2j:re2j` dependency. |
 | Android Gradle Plugin | `8.9.2` | Build-only Android tooling | <https://developer.android.com/build/releases/gradle-plugin> | `Apache-2.0` | [`Apache-2.0.txt`](THIRD_PARTY_LICENSES/Apache-2.0.txt) | Build-only; not packaged. |
 | Gradle Wrapper | `8.11.1` | Reproducible build launcher | <https://gradle.org/> | `Apache-2.0` | [`Apache-2.0.txt`](THIRD_PARTY_LICENSES/Apache-2.0.txt) | Build-only; unmodified. |
 | JUnit | `4.13.2` | JVM unit tests | <https://junit.org/junit4/> | `EPL-1.0` | [`EPL-1.0.txt`](THIRD_PARTY_LICENSES/EPL-1.0.txt) | Test-only; not packaged. |
@@ -33,4 +36,4 @@ Speex 1.2.1  4b44d4f2b38a370a2d98a78329fefc56a0cf93d1c1be70029217baae6628feea
 Connectivity test PCM  4e66d520dc28cc6eef1279b297d05173b48fb63887ed20ca9a7cca1835eafdab
 ```
 
-AndroidX is not used. No third-party networking library or Provider SDK is used; requests use Android platform `HttpURLConnection`. Android platform APIs and `org.json` are supplied by the OS rather than redistributed as standalone libraries.
+AndroidX is not used. The legacy API clients use Android platform `HttpURLConnection`; Advanced Audio API transport uses OkHttp and does not bundle a provider SDK. Android platform APIs and `org.json` are supplied by the OS rather than redistributed as standalone libraries.

@@ -7,6 +7,7 @@
     <string name="main_audio_section">録音設定</string>
     <string name="main_provider_section">音声 API 設定</string>
     <string name="main_post_processing_section">リライト API 設定</string>
+    <string name="main_advanced_audio_section">高度な音声 API 設定</string>
     <string name="main_retry_section">再試行設定</string>
     <string name="main_interaction_section">操作設定</string>
     <string name="main_display_section">表示設定</string>

@@ -7,6 +7,7 @@
     <string name="main_audio_section">Audio Record Settings</string>
     <string name="main_provider_section">Audio API Settings</string>
     <string name="main_post_processing_section">Rewrite API Settings</string>
+    <string name="main_advanced_audio_section">Advanced Audio API Settings</string>
     <string name="main_retry_section">Retry Settings</string>
     <string name="main_interaction_section">Interaction Settings</string>
     <string name="main_display_section">Display Settings</string>

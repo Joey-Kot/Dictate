@@ -1,0 +1,133 @@
+{
+  "schema_version": 2,
+  "name": "Typed JSON request",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "required": true,
+      "default": "qwen-audio-3.1-asr-flash",
+      "type": "text"
+    },
+    {
+      "id": "sample_rate",
+      "label": "Sample rate",
+      "required": true,
+      "default": "16000",
+      "type": "integer"
+    },
+    {
+      "id": "temperature",
+      "label": "Temperature",
+      "default": "0.2",
+      "type": "number"
+    },
+    {
+      "id": "enable_context",
+      "label": "Enable context",
+      "default": "true",
+      "type": "boolean"
+    },
+    {
+      "id": "language",
+      "label": "Language",
+      "default": "zh",
+      "type": "select",
+      "options": [
+        {
+          "value": "zh",
+          "label": "Chinese"
+        },
+        {
+          "value": "en",
+          "label": "English"
+        }
+      ]
+    },
+    {
+      "id": "language_hints",
+      "label": "Language hints",
+      "required": true,
+      "default": "[\"zh\",\"en\"]",
+      "type": "multi_select",
+      "options": [
+        {
+          "value": "zh",
+          "label": "Chinese"
+        },
+        {
+          "value": "en",
+          "label": "English"
+        }
+      ]
+    },
+    {
+      "id": "vocabulary",
+      "label": "Custom vocabulary",
+      "required": true,
+      "default": "{\"wake_phrase\":\"Dictate\"}",
+      "type": "json_object",
+      "visible_when": {
+        "parameter": "enable_context",
+        "equals": "true"
+      }
+    },
+    {
+      "id": "timestamp_options",
+      "label": "Timestamp options",
+      "default": "[\"sentence\"]",
+      "type": "json_array",
+      "visible_when": {
+        "parameter": "language",
+        "one_of": [
+          "zh",
+          "en"
+        ]
+      }
+    }
+  ],
+  "secrets": [
+    {
+      "id": "api_key",
+      "label": "API key",
+      "required": true
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    },
+    "mime": "audio/wav"
+  },
+  "recognition": {
+    "mode": "request",
+    "request": {
+      "method": "POST",
+      "url": "https://asr.example.test/v2/transcriptions",
+      "headers": {
+        "Authorization": "Bearer {{secret:api_key}}"
+      },
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "sample_rate": "{{var:sample_rate}}",
+          "temperature": "{{var:temperature}}",
+          "enable_context": "{{var:enable_context}}",
+          "language": "{{var:language}}",
+          "language_hints": "{{var:language_hints}}",
+          "vocabulary": "{{var:vocabulary}}",
+          "timestamp_options": "{{var:timestamp_options}}",
+          "audio": "{{audio:base64}}"
+        }
+      },
+      "accepted_statuses": [
+        200
+      ]
+    },
+    "final_text": {
+      "type": "json_path",
+      "path": "$.text"
+    }
+  }
+}

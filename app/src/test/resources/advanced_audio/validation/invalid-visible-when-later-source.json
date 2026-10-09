@@ -1,0 +1,56 @@
+{
+  "schema_version": 2,
+  "name": "Visibility source must be earlier and unconditional",
+  "parameters": [
+    {
+      "id": "hint",
+      "label": "Hint",
+      "default": "Mandarin",
+      "type": "text",
+      "visible_when": {
+        "parameter": "mode",
+        "equals": "accurate"
+      }
+    },
+    {
+      "id": "mode",
+      "label": "Mode",
+      "default": "fast",
+      "type": "select",
+      "options": [
+        {
+          "value": "fast",
+          "label": "Fast"
+        },
+        {
+          "value": "accurate",
+          "label": "Accurate"
+        }
+      ]
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    }
+  },
+  "recognition": {
+    "mode": "request",
+    "request": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/transcriptions",
+      "body": {
+        "type": "json",
+        "value": {
+          "hint": "{{var:hint}}",
+          "mode": "{{var:mode}}",
+          "audio": "{{audio:base64}}"
+        }
+      }
+    },
+    "final_text": {
+      "type": "json_path",
+      "path": "$.text"
+    }
+  }
+}

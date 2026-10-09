@@ -1,11 +1,16 @@
 package com.joeykot.dictate.settings
 
 import com.joeykot.dictate.R
+import com.joeykot.dictate.advanced_audio.AdvancedAudioWorkflowCodec
+import com.joeykot.dictate.advanced_audio.WorkflowValidator
+import com.joeykot.dictate.advanced_audio.remote_audio.RemoteAudioConfigValidator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Looper
 import com.joeykot.dictate.i18n.AppLocale
 import com.joeykot.dictate.i18n.AppStrings
+import com.joeykot.dictate.model.AdvancedAudioConfig
+import com.joeykot.dictate.model.RemoteAudioCredentialIds
 import com.joeykot.dictate.model.AppLanguage
 import com.joeykot.dictate.model.AppSettings
 import com.joeykot.dictate.model.AudioCodec
@@ -129,6 +134,7 @@ class SettingsRepository(context: Context) {
                         .getOrDefault(emptyList())
                 } ?: emptyList(),
             ),
+            advancedAudio = readAdvancedAudio(),
         )
     }
 
@@ -140,11 +146,18 @@ class SettingsRepository(context: Context) {
             secureApiKeyStore.get(),
             secureApiKeyStore.getPostProcessing(),
             settings.postProcessing.prompts.filter { it.provider != null }.associate { it.id to secureApiKeyStore.getPrompt(it.id) },
+            secureApiKeyStore.getAdvancedSecrets(),
         )
     }
 
     @Synchronized
     fun promptApiKey(id: String): String = secureApiKeyStore.getPrompt(id)
+
+    @Synchronized
+    fun advancedAudioSecret(id: String): String = secureApiKeyStore.getAdvancedSecret(id)
+
+    @Synchronized
+    fun advancedAudioSecrets(): Map<String, String> = secureApiKeyStore.getAdvancedSecrets()
 
     @SuppressLint("ApplySharedPref")
     @Synchronized
@@ -153,9 +166,11 @@ class SettingsRepository(context: Context) {
         apiKey: String,
         postProcessingApiKey: String = secureApiKeyStore.getPostProcessing(),
         promptApiKeys: Map<String, String> = emptyMap(),
+        advancedAudioSecrets: Map<String, String>? = null,
     ) {
         check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
-        val errors = validate(settings)
+        val effectiveAdvancedSecrets = advancedAudioSecrets ?: secureApiKeyStore.getAdvancedSecrets()
+        val errors = validate(settings, effectiveAdvancedSecrets)
         require(errors.isEmpty()) { errors.joinToString("；") }
         val previousIconNames = storedIconNames()
 
@@ -178,6 +193,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_POST_BASE_URL, normalized.postProcessing.baseUrl.trim())
             .putString(KEY_POST_MODEL, normalized.postProcessing.model.trim())
             .putString(KEY_PROMPTS, PostProcessingSettingsCodec.encodePrompts(normalized.postProcessing.prompts).toString())
+            .putString(KEY_ADVANCED_AUDIO, AdvancedAudioSettingsCodec.encode(normalized.advancedAudio).toString())
             .putBoolean(KEY_RETRY_ENABLED, normalized.retry.enabled)
             .putInt(KEY_MAX_RETRIES, normalized.retry.maxRetries)
             .putLong(
@@ -196,11 +212,28 @@ class SettingsRepository(context: Context) {
         secureApiKeyStore.stage(editor, apiKey.trim())
         secureApiKeyStore.stagePostProcessing(editor, postProcessingApiKey.trim())
         secureApiKeyStore.stagePrompts(editor, normalized.postProcessing.prompts.map { it.id }.toSet(), promptApiKeys)
+        advancedAudioSecrets?.let { secureApiKeyStore.stageAdvancedSecrets(editor, it) }
         // Configuration and encrypted API keys become durable as one transaction.
         check(editor.commit()) { AppStrings.get(R.string.settings_write_failed, "Failed to save settings") }
         AppStrings.refresh(applicationContext)
         secureApiKeyStore.clearLegacyValue()
         removeReplacedIcons(previousIconNames, normalized.postProcessing.prompts)
+    }
+
+    /**
+     * Saves an Advanced Audio API draft and its encrypted secrets without
+     * requiring a complete ordinary provider configuration.
+     */
+    @SuppressLint("ApplySharedPref")
+    @Synchronized
+    fun saveAdvancedAudio(config: AdvancedAudioConfig, secrets: Map<String, String>) {
+        check(Looper.myLooper() != Looper.getMainLooper()) { AppStrings.get(R.string.settings_write_thread, "Settings cannot be written on the main thread") }
+        val errors = validateAdvancedAudio(config, secrets)
+        require(errors.isEmpty()) { errors.joinToString("；") }
+        val editor = preferences.edit()
+            .putString(KEY_ADVANCED_AUDIO, AdvancedAudioSettingsCodec.encode(config).toString())
+        secureApiKeyStore.stageAdvancedSecrets(editor, secrets)
+        check(editor.commit()) { AppStrings.get(R.string.settings_write_failed, "Failed to save settings") }
     }
 
     /** Prompt editing is independent of unsaved or incomplete public provider configuration. */
@@ -223,12 +256,30 @@ class SettingsRepository(context: Context) {
             .mapNotNull { it.customIcon }.filter(PromptIconAssets::isSafeFileName).toSet()
     }.getOrDefault(emptySet())
 
+    /**
+     * Advanced Audio is opt-in. A corrupt or future local draft must fall back
+     * to the normal OpenAI-compatible route instead of preventing settings
+     * from loading altogether.
+     */
+    private fun readAdvancedAudio(): AdvancedAudioConfig = runCatching {
+        val config = preferences.getString(KEY_ADVANCED_AUDIO, null)
+            ?.let { encoded -> AdvancedAudioSettingsCodec.decode(JSONObject(encoded)) }
+            ?: AdvancedAudioConfig()
+        require(RemoteAudioConfigValidator.validateStoredConfiguration(config.remoteAudio).isEmpty()) {
+            "Advanced Audio remote storage URL contains user-info"
+        }
+        config
+    }.getOrDefault(AdvancedAudioConfig())
+
     private fun removeReplacedIcons(previous: Set<String>, prompts: List<PromptConfig>) {
         val current = prompts.mapNotNull { it.customIcon }.toSet()
         (previous - current).forEach { name -> runCatching { File(iconDirectory, name).delete() } }
     }
 
-    fun validate(settings: AppSettings): List<String> = buildList {
+    fun validate(
+        settings: AppSettings,
+        advancedAudioSecrets: Map<String, String> = secureApiKeyStore.getAdvancedSecrets(),
+    ): List<String> = buildList {
         addAll(settings.audio.validate())
         addAll(settings.retry.validate())
         addAll(settings.interaction.validate())
@@ -254,12 +305,54 @@ class SettingsRepository(context: Context) {
             }
         }
         addAll(PostProcessingSettingsCodec.validatePrompts(settings.postProcessing.prompts))
+        addAll(validateAdvancedAudio(settings.advancedAudio, advancedAudioSecrets))
     }
+
+    /**
+     * Enabled Advanced Audio configurations must be runnable before they can
+     * become durable.  Disabled drafts intentionally retain the old relaxed
+     * policy, except for URL user-info which would otherwise leak credentials
+     * into plain preferences and export files.
+     */
+    private fun validateAdvancedAudio(
+        config: AdvancedAudioConfig,
+        secrets: Map<String, String>,
+    ): List<String> = buildList {
+        addAll(RemoteAudioConfigValidator.validateStoredConfiguration(config.remoteAudio).map { it.toString() })
+        if (!config.enabled) return@buildList
+
+        val document = config.workflowJson?.trim().takeIf { !it.isNullOrEmpty() }
+        if (document == null) {
+            add("ADVANCED_AUDIO_API.workflow: is required when Advanced Audio API is enabled")
+            return@buildList
+        }
+        val workflow = try {
+            AdvancedAudioWorkflowCodec.parse(document)
+        } catch (error: IllegalArgumentException) {
+            add("ADVANCED_AUDIO_API.workflow: ${error.message ?: "is invalid"}")
+            return@buildList
+        }
+        val remoteCredentialIds = RemoteAudioCredentialIds.forConfig(config.remoteAudio)
+        val workflowSecrets = secrets.filterKeys { id ->
+            id !in remoteCredentialIds && workflow.secrets.any { it.id == id }
+        }
+        addAll(
+            WorkflowValidator.validateExecutionInputs(workflow, config.values, workflowSecrets)
+                .map { it.toString() },
+        )
+        addAll(
+            RemoteAudioConfigValidator.validate(
+                config = config.remoteAudio,
+                delivery = workflow.audio.delivery,
+                secrets = secrets,
+            ).map { it.toString() },
+        )
+    }.distinct()
 
     fun exportJson(): String {
         val settings = get()
         val root = JSONObject()
-        root.put("schemaVersion", 6)
+        root.put("schemaVersion", 7)
         root.put("language", settings.language.tag)
         root.put(
             "audioOutput",
@@ -283,6 +376,8 @@ class SettingsRepository(context: Context) {
                 .put("model", settings.provider.model)
                 .put("additionalParameters", additional),
         )
+        // Advanced Audio API secrets and remote-storage credentials are held only in Keystore.
+        root.put("advancedAudio", AdvancedAudioSettingsCodec.encode(settings.advancedAudio))
         root.put(
             "retry",
             JSONObject()
@@ -382,6 +477,22 @@ class SettingsRepository(context: Context) {
                 if (item.has("apiKey")) put(prompt.id, requiredString(item, "apiKey", "postProcessing.prompts[$index].apiKey"))
             }
         }
+        val advancedAudioObject = if (schemaVersion >= 7) {
+            requiredObject(root, "advancedAudio", "advancedAudio")
+        } else {
+            null
+        }
+        val advancedAudio = advancedAudioObject?.let { AdvancedAudioSettingsCodec.decode(it) }
+            ?: AdvancedAudioConfig()
+        val hasAdvancedAudioSecrets = advancedAudioObject?.has("secrets") == true
+        val importedAdvancedAudioSecrets = if (hasAdvancedAudioSecrets) {
+            AdvancedAudioSettingsCodec.decodeStringMap(
+                requiredObject(advancedAudioObject!!, "secrets", "advancedAudio.secrets"),
+                "advancedAudio.secrets",
+            )
+        } else {
+            emptyMap()
+        }
         val iconAssetsObject = if (schemaVersion >= 4 && root.has("promptIconAssets")) {
             requiredObject(root, "promptIconAssets", "promptIconAssets")
         } else {
@@ -443,12 +554,26 @@ class SettingsRepository(context: Context) {
             ),
             display = display,
             postProcessing = postProcessing,
+            advancedAudio = advancedAudio,
         )
 
-        val errors = validate(imported)
+        val advancedSecretsForValidation = when {
+            hasAdvancedAudioSecrets -> importedAdvancedAudioSecrets
+            get().advancedAudio == advancedAudio -> secureApiKeyStore.getAdvancedSecrets()
+            else -> emptyMap()
+        }
+        val errors = validate(imported, advancedSecretsForValidation)
         if (errors.isNotEmpty()) throw IllegalArgumentException(errors.joinToString("；"))
 
-        return ImportPreview(imported, importedApiKey, importedPostProcessingApiKey, iconAssets, importedPromptKeys)
+        return ImportPreview(
+            settings = imported,
+            apiKey = importedApiKey,
+            postProcessingApiKey = importedPostProcessingApiKey,
+            iconAssets = iconAssets,
+            promptApiKeys = importedPromptKeys,
+            advancedAudioSecrets = importedAdvancedAudioSecrets,
+            hasAdvancedAudioSecrets = hasAdvancedAudioSecrets,
+        )
     }
 
     @Synchronized
@@ -457,9 +582,15 @@ class SettingsRepository(context: Context) {
         if (preview.hasApiKeys && !allowApiKey) {
             throw IllegalArgumentException(AppStrings.get(R.string.settings_import_api_key, "The imported file contains API keys and requires explicit confirmation"))
         }
-        val errors = validate(preview.settings)
+        val currentSettings = get()
+        val advancedSecrets = when {
+            preview.hasAdvancedAudioSecrets -> preview.advancedAudioSecrets
+            currentSettings.advancedAudio == preview.settings.advancedAudio -> secureApiKeyStore.getAdvancedSecrets()
+            else -> emptyMap()
+        }
+        val errors = validate(preview.settings, advancedSecrets)
         require(errors.isEmpty()) { errors.joinToString("；") }
-        val currentPrompts = get().postProcessing.prompts.associateBy { it.id }
+        val currentPrompts = currentSettings.postProcessing.prompts.associateBy { it.id }
         val promptKeys = preview.settings.postProcessing.prompts.associate { prompt ->
             val previous = currentPrompts[prompt.id]
             val key = preview.promptApiKeys[prompt.id] ?: if (
@@ -480,6 +611,7 @@ class SettingsRepository(context: Context) {
                 preview.apiKey ?: secureApiKeyStore.get(),
                 preview.postProcessingApiKey ?: secureApiKeyStore.getPostProcessing(),
                 promptKeys,
+                advancedSecrets,
             )
         } catch (error: Exception) {
             installedIcons.values.forEach { File(iconDirectory, it).delete() }
@@ -606,8 +738,16 @@ class SettingsRepository(context: Context) {
         val postProcessingApiKey: String? = null,
         val iconAssets: Map<String, ByteArray> = emptyMap(),
         val promptApiKeys: Map<String, String> = emptyMap(),
+        val advancedAudioSecrets: Map<String, String> = emptyMap(),
+        val hasAdvancedAudioSecrets: Boolean = false,
     ) {
-        val hasApiKeys: Boolean get() = apiKey != null || postProcessingApiKey != null || promptApiKeys.isNotEmpty()
+        val hasApiKeys: Boolean get() = apiKey != null || postProcessingApiKey != null ||
+            promptApiKeys.isNotEmpty() || hasAdvancedAudioSecrets
+
+        override fun toString(): String =
+            "ImportPreview(settings=$settings, apiKey=<redacted>, postProcessingApiKey=<redacted>, " +
+                "iconAssets=${iconAssets.keys}, promptApiKeys=<redacted>, advancedAudioSecrets=<redacted>, " +
+                "hasAdvancedAudioSecrets=$hasAdvancedAudioSecrets)"
     }
 
     data class OverlayPosition(
@@ -631,6 +771,7 @@ class SettingsRepository(context: Context) {
         const val KEY_POST_BASE_URL = "post_processing.base_url"
         const val KEY_POST_MODEL = "post_processing.model"
         const val KEY_PROMPTS = "post_processing.prompts"
+        const val KEY_ADVANCED_AUDIO = "advanced_audio.config"
         const val KEY_RETRY_ENABLED = "retry.enabled"
         const val KEY_MAX_RETRIES = "retry.max_retries"
         const val KEY_INITIAL_BACKOFF = "retry.initial_backoff"
@@ -646,7 +787,7 @@ class SettingsRepository(context: Context) {
         const val KEY_OVERLAY_X = "overlay.x"
         const val KEY_OVERLAY_Y = "overlay.y"
         const val LEGACY_DEFAULT_SAMPLE_RATE = 16_000
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4, 5, 6)
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4, 5, 6, 7)
         val RGB_HEX = Regex("#[0-9A-Fa-f]{6}")
     }
 }

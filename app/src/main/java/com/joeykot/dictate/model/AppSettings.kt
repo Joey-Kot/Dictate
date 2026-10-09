@@ -145,6 +145,7 @@ data class AppSettings(
     val interaction: InteractionConfig = InteractionConfig(),
     val display: DisplayConfig = DisplayConfig(),
     val postProcessing: PostProcessingConfig = PostProcessingConfig(),
+    val advancedAudio: AdvancedAudioConfig = AdvancedAudioConfig(),
     val language: AppLanguage = AppLanguage.ENGLISH,
 )
 
@@ -153,7 +154,12 @@ data class RuntimeSettings(
     val apiKey: String,
     val postProcessingApiKey: String = "",
     val promptApiKeys: Map<String, String> = emptyMap(),
-)
+    val advancedAudioSecrets: Map<String, String> = emptyMap(),
+) {
+    override fun toString(): String =
+        "RuntimeSettings(app=$app, apiKey=<redacted>, postProcessingApiKey=<redacted>, " +
+            "promptApiKeys=<redacted>, advancedAudioSecrets=<redacted>)"
+}
 
 enum class JobState {
     IDLE,

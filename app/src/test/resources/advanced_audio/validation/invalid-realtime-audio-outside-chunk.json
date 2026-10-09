@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "name": "Realtime setup has no audio template values",
+  "parameters": [],
+  "secrets": [],
+  "audio": {
+    "delivery": {
+      "type": "realtime_chunks"
+    }
+  },
+  "recognition": {
+    "mode": "realtime_session",
+    "realtime": {
+      "transport": "websocket",
+      "connect": {
+        "url": "wss://realtime.example.test/v1/transcriptions",
+        "query": {
+          "filename": "{{audio:filename}}"
+        }
+      },
+      "audio_stream": {
+        "codec": "pcm_s16le",
+        "sample_rate": 16000,
+        "channels": 1,
+        "chunk_duration_ms": 100,
+        "pacing": "realtime"
+      },
+      "audio_message": {
+        "type": "text",
+        "value": "{{audio:chunk_base64}}"
+      },
+      "receive_rules": [],
+      "completion": {
+        "event": "completed"
+      },
+      "pause_behavior": "restart_session",
+      "finalization_timeout_ms": 15000
+    }
+  }
+}

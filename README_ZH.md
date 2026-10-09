@@ -4,36 +4,41 @@
 
 Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦点的无障碍悬浮按钮操作。音频或选中文本直接发送到用户配置的指定服务，每次执行一个任务。转写和后处理共用同一个写入规则：实际写入时没有选区，就在当前光标处插入；有可编辑选区，就替换该段文本。
 
+## 下载
+
+| Platform | Download | SHA-256 |
+|---|---|---|
+| arm64-v8a | [arm64-v8a](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk) | [sha256](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk.sha256) |
+
 ## 操作演示与配置
 
 | [<img src="demo/Demo-ZH.gif" alt="Dictate 中文操作演示" width="320">](demo/Demo-ZH.gif) |
 | :---: |
 | **实际操作**<br>通过悬浮按钮录音转写，再选中文本，使用自定义提示词进行改写、翻译等操作。 |
 
-| [![权限设置](demo/1.%20Permissions.png)](demo/1.%20Permissions.png) | [![界面语言](demo/2.%20UI%20language.png)](demo/2.%20UI%20language.png) |
-| :---: | :---: |
-| **1. 权限设置**<br>启用无障碍服务并授予麦克风权限。 | **2. 界面语言**<br>支持英语、中文、日语、德语、法语和俄语，选择后保存生效。 |
-| [![录音设置](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) | [![音频 API 设置](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) |
-| **3. 录音设置**<br>选择输出采样率、编码、容器和比特率。 | **4. 音频 API 设置**<br>配置转写服务的 Base URL、API Key、模型及附加 JSON 参数，并通过真实转写请求测试连接。 |
-| [![改写 API 设置](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![提示词编辑](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
-| **5. 改写 API 设置**<br>配置文本后处理的服务商、Base URL、API Key 和模型，管理提示词顺序并测试连接。 | **6. 提示词编辑**<br>设置服务商、图标、标题、内容和附加 JSON；默认继承主 Provider，也可配置并测试独立 API。 |
-| [![重试设置](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![交互设置](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) |
-| **7. 重试设置**<br>开启自动重试，设置最大重试次数和初始等待时间。 | **8. 交互设置**<br>设置是否始终复制结果到剪贴板，以及长按阈值和双击最大间隔。 |
-| [![显示设置](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) | [![配置保存与导入导出](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) |
-| **9. 显示设置**<br>调整悬浮按钮大小、不透明度和各状态颜色，并管理通知设置。 | **10. 配置保存与导入导出**<br>保存设置，通过 JSON 导入或导出配置，以及查看或清空诊断信息。 |
+| [![权限设置](demo/1.%20Permissions.png)](demo/1.%20Permissions.png) | [![界面语言](demo/2.%20UI%20language.png)](demo/2.%20UI%20language.png) | [![录音设置](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) |
+| :---: | :---: | :---: |
+| **1. 权限设置**<br>启用无障碍服务并授予麦克风权限。 | **2. 界面语言**<br>支持英语、中文、日语、德语、法语和俄语，选择后保存生效。 | **3. 录音设置**<br>选择输出采样率、编码、容器和比特率。 |
+| [![音频 API 设置](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) | [![改写 API 设置](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![提示词编辑](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
+| **4. 音频 API 设置**<br>配置转写服务的 Base URL、API Key、模型及附加 JSON 参数，并通过真实转写请求测试连接。 | **5. 改写 API 设置**<br>配置文本后处理的服务商、Base URL、API Key 和模型，管理提示词顺序并测试连接。 | **6. 提示词编辑**<br>设置服务商、图标、标题、内容和附加 JSON；默认继承主 Provider，也可配置并测试独立 API。 |
+| [![重试设置](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![交互设置](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) | [![显示设置](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) |
+| **7. 重试设置**<br>开启自动重试，设置最大重试次数和初始等待时间。 | **8. 交互设置**<br>设置是否始终复制结果到剪贴板，以及长按阈值和双击最大间隔。 | **9. 显示设置**<br>调整悬浮按钮大小、不透明度和各状态颜色，并管理通知设置。 |
+| [![配置保存与导入导出](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) | [![高级音频 API 设置](demo/11.%20Advanced%20Audio%20API%20Settings.png)](demo/11.%20Advanced%20Audio%20API%20Settings.png) | [![生成工作流](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png)](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png) |
+| **10. 配置保存与导入导出**<br>保存设置，通过 JSON 导入或导出配置，以及查看或清空诊断信息。 | **11. 高级自定义 Audio API Provider**<br>根据独立的用户需求和厂商资料生成并校验声明式 ASR Provider 工作流，提供类型化、条件显示、单选和多选控件，支持单请求、流式响应、异步轮询和 WebSocket 实时转写。 | **12. 生成工作流**<br>粘贴厂商文档请求示例，描述需要使用的参数，即可生成自定义 Audio API Provider 工作流。 |
+| [![工作流 JSON 与摘要](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png)](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png) | [![动态参数与密钥](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png)](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png) | [![远端音频配置](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png)](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png) |
+| **13. 工作流 JSON 与摘要**<br>查看生成的 JSON 与摘要。 | **14. 动态参数与密钥**<br>校验后按工作流声明生成类型化控件；只有工作流需要时才显示远端音频。 | **15. 远端音频配置**<br>音频需要通过公网 URL 或云 URI 投递时，可配置 WebDAV、S3-compatible 或阿里云 OSS。 |
+|  | [![工作流端点测试](demo/16.%20Successfully%20tested%20the%20workflow%20API.png)](demo/16.%20Successfully%20tested%20the%20workflow%20API.png) |  |
+|  | **16. 工作流端点测试**<br>使用当前工作流草稿及其声明的值和密钥测试真实端点。 |  |
 
 ## 音频转录功能介绍
 
-- 非 IME 形式，没有键盘、候选栏、历史列表、云账号或代理服务。
-- `AudioRecord` PCM 录音：按当前输入路由选择采样率，固定 16-bit 单声道；支持暂停/恢复、前台麦克风服务、唤醒锁和取消。
-- 无障碍悬浮按钮不抢焦点，可实时拖动并保存位置；可配置大小、不透明度，以及录制／暂停／处理中三种状态的预置或自定义色系，保存后无需重启无障碍服务；恢复时会按系统边距、刘海和可见屏幕重新裁剪，拖动不改变当前语音任务。
-- 已开始的录音在熄屏后继续；不提供锁屏控制或锁屏上屏。
-- 从经过校验的源码包构建 FFmpeg `8.1` 及 Opus、LAME、Vorbis、AMR-NB/WB、Speex，目前只提供 `arm64-v8a` 二进制。
-- 提供 28 项音频编码选项，覆盖无损格式、语音编码、WMA、ADPCM、整数及浮点 PCM。设置按编码器联动采样率、位深度、容器和码率，录音结束后统一转换；自动输出采样率适配编码器与录音输入，最高 48 kHz。
-- 直接 multipart 请求 OpenAI Compatible `/v1/audio/transcriptions`；成功响应必须含顶层非空字符串 `text`；目前暂不考虑支持 OpenAI Compatible 以外的其他 API，如有其他厂商服务需求，可使用任意兼容转换服务转换为 OpenAI Compatible 使用。
-- 默认保留结果的剪贴板副本；关闭该开关后，只有明确写入失败才使用剪贴板兜底。
-- FFmpeg、HTTP 和指数退避等待均可取消，所有回调受递增任务 ID 保护。
-- Keystore 支持的 API Key 加密、脱敏诊断、真实端点测试、完整校验的 JSON 导入导出。
+- **录音转写**：非 IME，通过不抢焦点的悬浮按钮进行录音转写，支持暂停、取消和重新转录最近一次录音，可熄屏使用。
+- **文本改写**：配置提示词及不同服务商、模型、参数，选择文本后长按悬浮按钮可选择调用。
+- **自定义 API**：配置普通 OpenAI-compatible 风格音频 API 与不同服务商的 Rewrite 接口、模型、提示词和额外请求参数。
+- **高级自定义 Audio API Provider**：根据独立的用户需求和厂商资料生成并校验声明式 ASR Provider 工作流，提供类型化、条件显示、单选和多选控件，支持单请求、流式响应、异步轮询和 WebSocket 实时转写。
+- **自动写入**：转写与改写结果写入当前光标处或替换当前可编辑选区，默认保留结果的剪贴板副本，关闭后只有明确写入失败才使用剪贴板兜底。
+- **音频处理**：选择录制和输出格式；内嵌 FFmpeg，无需另行安装。
+- **任务与配置安全**：转码、网络请求和重试均可取消；API Key、工作流及远端存储密钥通过 Android Keystore 加密，并支持脱敏诊断、真实端点测试和已校验的 JSON 导入导出。
 
 ### 选中文本后处理功能介绍
 
@@ -58,12 +63,6 @@ Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦
 
 提示词菜单是可纵向滚动的圆角半透明面板，从按钮位置平滑展开；点击菜单外区域收回空闲麦克风按钮。点击条目后收回圆形按钮并进入处理中状态。新安装或尚未添加提示词时，即使选中了文本，长按也继续重发上一条录音。
 
-## 下载
-
-| Platform | Download | SHA-256 |
-|---|---|---|
-| arm64-v8a | [arm64-v8a](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk) | [sha256](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk.sha256) |
-
 ## 架构
 
 ```mermaid
@@ -74,10 +73,19 @@ flowchart LR
   L --> C
   C --> D["AudioRecord"]
   C --> E["内嵌 FFmpeg CLI"]
-  C --> F["HttpURLConnection"]
-  F --> G["用户 Base URL"]
+  C --> F["普通 OpenAI-compatible<br/>HttpURLConnection"]
+  F --> G["用户普通 API URL"]
+  C --> AA["AdvancedAudioClient<br/>校验并渲染工作流"]
+  AA --> OH["OkHttp HTTP<br/>请求／流式／异步轮询"]
+  OH --> V["厂商 API"]
+  AA --> RA["RemoteAudioPublisher"]
+  RA --> RS["WebDAV／S3-compatible／OSS"]
+  D --> RT["有界 PCM tee<br/>高级实时转写"]
+  RT --> WS["OkHttp WebSocket"]
+  WS --> V
   C --> H["后处理 Provider 适配与 JSON 合并"]
-  H --> F
+  H --> PH["专用厂商后处理 HTTP"]
+  PH --> PV["后处理 Provider API"]
   C --> T["TextDelivery"]
   T --> W["无障碍文本写入管线"]
   W -->|"Android 13+"| M["AccessibilityInputConnection<br/>commitText + 写入验证"]
@@ -87,7 +95,7 @@ flowchart LR
   T -->|"开启始终复制<br/>或直接写入明确失败"| I["剪贴板"]
   I -->|"直接写入明确失败"| P["ACTION_PASTE"]
   P --> X
-  J["配置页"] --> K["Preferences + Keystore"]
+  J["配置页<br/>普通模式与高级工作流"] --> K["Preferences + Keystore"]
 ```
 
 ## 请求流程
@@ -99,12 +107,14 @@ sequenceDiagram
   participant J as VoiceJobController
   participant R as AudioRecord
   participant F as FFmpeg
-  participant P as 端点
+  participant V as 转写服务
+  participant P as 后处理 Provider
+  participant S as 远端存储
   participant D as TextDelivery
   participant A as 无障碍服务
   participant E as 当前编辑器
   participant C as 剪贴板
-  alt 语音转写
+  alt 普通语音转写
     U->>O: 单击
     O->>J: 开始录音
     J->>R: 按当前输入路由采样率录制单声道原始 PCM
@@ -112,7 +122,32 @@ sequenceDiagram
     O->>J: 停止并转写
     J->>R: 停止并保留原始录音
     J->>F: 按当前设置转码
-    J->>P: POST /v1/audio/transcriptions
+    J->>V: POST OpenAI-compatible 转写请求
+    V-->>J: 返回最终文本
+  else 高级非实时语音转写
+    U->>O: 单击后再次单击
+    O->>J: 录音、停止并保留原始录音
+    J->>F: 按当前设置转码
+    opt 工作流需要远端音频引用
+      J->>S: 发布编码音频
+      S-->>J: 公网 HTTPS URL 或 cloud URI
+    end
+    J->>V: 已校验的请求、流式或异步工作流
+    Note over J,V: 轮询／结果可重试；submit 绝不重发
+    V-->>J: 返回最终文本
+  else 高级实时语音转写
+    U->>O: 单击
+    O->>J: 开始录音
+    J->>R: 保留本地 PCM，并挂接有界 tee
+    J->>V: 打开 WebSocket 并发送初始消息
+    R->>V: 逐块发送 PCM
+    U->>O: 单击
+    O->>J: 停止录音
+    J->>V: 发送 finish 并等待明确完成
+    opt live 会话失败、积压或未完整结束
+      J->>V: 从零点回放完整本地 PCM
+    end
+    V-->>J: 返回最终文本
   else 已选中文本且有提示词
     U->>O: 长按空闲按钮
     O->>A: 读取当前选中文本
@@ -121,8 +156,8 @@ sequenceDiagram
     U->>O: 点击提示词
     O->>J: 提交输入文本与条目
     J->>P: 合并条目 JSON 后发送后处理请求
+    P-->>J: 返回最终文本
   end
-  P-->>J: 返回文本
   J->>J: 保持“请求中”，进入写入阶段
   J->>D: 投递文本（受任务 ID 和取消状态保护）
   D->>A: 按此刻的焦点和选区插入或替换
@@ -166,9 +201,9 @@ stateDiagram-v2
   空闲 --> 请求中: 选择后处理提示词
   录制中 --> 已暂停
   已暂停 --> 录制中
-  录制中 --> 转码中
+  录制中 --> 转码中: 停止
   转码中 --> 请求中
-  请求中 --> 重试等待中
+  请求中 --> 重试等待中: 普通、后处理或实时回放重试
   重试等待中 --> 请求中
   请求中 --> 空闲: 请求或投递结束
   转码中 --> 空闲
@@ -178,19 +213,24 @@ stateDiagram-v2
   请求中 --> 空闲: 取消并保留原始录音
   重试等待中 --> 空闲: 取消并保留原始录音
   note right of 请求中
-    包含 HTTP 请求、写入验证、
-    始终复制副本，或明确失败时的
-    剪贴板与粘贴兜底
+    包含普通与高级 HTTP 阶段、
+    远端上传和清理、流式／轮询／结果、
+    实时收尾或 PCM 回放、写入验证、
+    始终复制副本和粘贴兜底
+  end note
+  note right of 已暂停
+    高级实时转写会结束当前会话；
+    恢复时新建会话或降级为回放
   end note
 ```
 
-内部任务状态仍为空闲、录制中、已暂停、转码中、请求中和重试等待中。菜单展开属于空闲时的界面状态，不启动请求。后处理直接进入请求中，跳过录音和转码；完成、失败或取消均不替换上一条录音。
+内部任务状态仍为空闲、录制中、已暂停、转码中、请求中和重试等待中。高级 HTTP 工作流阶段复用请求中；其阶段级重试不会进入重试等待中，也不会重新 submit 异步任务。实时 PCM 回放的重试会进入重试等待中，并从零点重新开始。菜单展开属于空闲时的界面状态，不启动请求。后处理直接进入请求中，跳过录音和转码；完成、失败或取消均不替换上一条录音。
 
 ## 使用要求
 
 - Android 8.0+（`minSdk 26`）和 `arm64-v8a` 设备。
 - 已启用的 Dictate 无障碍服务；录音还需要麦克风权限。
-- 转写需要 OpenAI Compatible `POST /v1/audio/transcriptions` 端点、Base URL、API Key 和模型。
+- 转写需要普通 OpenAI Compatible `POST /v1/audio/transcriptions` 端点、Base URL、API Key 和模型，或启用已校验的高级音频 API 工作流及其声明的值和密钥。
 - 后处理需要有效的 Provider、Base URL、API Key、模型配置及至少一条提示词；API 配置可使用公共设置，也可按提示词单独设置。
 
 选区读取及无障碍写入依赖目标应用提供的能力。只读文本可以作为后处理输入；密码框、受保护界面和自绘控件可能不暴露选区或拒绝写入。无可写入焦点时沿用剪贴板兜底，项目不做逐 App 专项兼容。
@@ -205,11 +245,10 @@ Android 13 及以上版本在无障碍节点未提供选中文本时，还会通
 export ANDROID_HOME=/path/to/android-sdk
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 export GRADLE_USER_HOME=/tmp/gradle-user-home
-./scripts/build-android-ffmpeg.sh
 ./gradlew :app:assembleDebug
 ```
 
-脚本生成 `app/src/main/jniLibs/arm64-v8a/libffmpeg.so`，语音转写运行时需要此文件；仅完成 Gradle Debug 构建不会自动生成 FFmpeg。签名 release 还需 `ANDROID_KEYSTORE_PATH`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
+`assembleDebug` 会在 arm64 FFmpeg 二进制缺失或构建脚本发生变化时自动执行 `scripts/build-android-ffmpeg.sh`，并将结果打包到 `app/src/main/jniLibs/arm64-v8a/libffmpeg.so`。这要求已安装 Android NDK，并通过 `ANDROID_NDK_HOME` 或 `ANDROID_NDK_ROOT` 指定；未变化的 Debug 构建会复用已生成的二进制。脚本仍可单独执行，用于只重建本地原生组件。签名 release 还需 `ANDROID_KEYSTORE_PATH`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。
 
 Release 构建启用 R8 代码压缩、优化、混淆和资源缩减。CI 将 `mapping.txt` 保存为工作流产物，用于还原崩溃堆栈。Debug 构建保持不压缩。
 
@@ -241,16 +280,22 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 ## 使用方法（配置）
 
 1. 授予麦克风权限，在 Android 无障碍设置中启用 Dictate。通知可通过「显示设置」中的开关开启或关闭。
-2. 填写 Base URL（`https://example.com` 或 `https://example.com/v1`）、API Key 和模型。
-3. 可选填写完整附加 JSON 对象，按下述合并规则生成 multipart 参数；对象和数组序列化为 JSON 字段值。`model` 可以覆盖，`file` 属于二进制音频附件，同名附加参数会报告冲突。
-4. 执行真实端点测试；应用按当前音频设置转码内置短语音并调用转写端点，不使用 `/v1/models`。
+2. 普通模式填写 Base URL（`https://example.com` 或 `https://example.com/v1`）、API Key 和模型；也可启用「高级音频 API 设置」，粘贴或生成已校验工作流，再填写其声明的值和密钥。
+3. 普通模式可选填写完整附加 JSON 对象，按下述合并规则生成 multipart 参数；对象和数组序列化为 JSON 字段值。`model` 可以覆盖，`file` 属于二进制音频附件，同名附加参数会报告冲突。
+4. 执行真实端点测试：普通模式按当前音频设置转码内置短语音并调用转写端点，不使用 `/v1/models`；高级模式使用当前未保存的工作流草稿及其值和密钥。
 5. 可选配置悬浮按钮大小、不透明度，以及预置或 Custom 三状态色系；保存配置后，在普通可编辑输入框中保留光标并使用悬浮按钮。
 
 「录音设置」上方设有语言选项，默认英文，不随系统语言变化。列表依次为 English、中文、日本語、Deutsch、Français、Русский，选择后点击「保存设置」生效，覆盖界面、弹窗、状态提示和录音通知。此选项不改变语音转写的语言，也不修改用户填写的提示词和 API 参数。
 
-各设置区域不带编号，依次为：录音设置、音频 API 设置、改写 API 设置、重试设置、交互设置、显示设置。标题随界面语言切换；底部「关于」展示作者、邮箱、许可证、仓库地址和当前安装版本的版本号。
+各设置区域不带编号，依次为：录音设置、音频 API 设置、改写 API 设置、高级音频 API 设置、重试设置、交互设置、显示设置。标题随界面语言切换；底部「关于」展示作者、邮箱、许可证、仓库地址和当前安装版本的版本号。
 
 「显示通知」开关反映系统中的应用通知及录音通知渠道状态。点击后进入系统通知设置，返回时自动同步；关闭通知不影响录音。Android 13 及以上版本关闭通知栏通知后，系统任务管理器仍可能显示正在运行的前台服务。此项由系统管理，不随应用配置导出。
+
+### 高级音频 API 设置
+
+当普通 OpenAI-compatible 转写接口无法覆盖厂商协议时，可启用这项可选模式。粘贴兼容的声明式工作流，或填写需求并提供厂商文档、请求示例以生成工作流；只有校验并应用后，才填写动态生成的参数和密钥。
+
+已校验工作流通过公网 HTTPS URL 或云 URI 投递音频时，才显示远端音频设置。按需选择 WebDAV、S3-compatible 存储或阿里云 OSS。点击「测试工作流」会使用当前未保存的草稿、其声明的值和密钥访问真实端点。
 
 ### 音频编码设置
 
@@ -319,13 +364,13 @@ MP3 使用 MP4 时要求至少 16 kHz；使用 FLV 时只提供 11.025、22.05�
 
 所选公共或独立 API 配置中的 Model 是默认值，最终请求按合并后的 Model 校验。Google 的最终模型用于请求 URL。附加参数应符合所选 Provider 的接口格式；字段删除后缺少接口必需参数时会收到配置或服务端错误。
 
-配置导出使用 `schemaVersion: 6`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。继续支持导入旧版 1～5 配置，其中 1～4 版的 `bitrateKbps` 换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
+配置导出使用 `schemaVersion: 7`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标，以及不含密钥的 `advancedAudio` 配置。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。支持导入 1～7 版配置；第 7 版必须包含 `advancedAudio`，其中 1～4 版的 `bitrateKbps` 会换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
 
 “始终复制到剪贴板”默认开启。关闭后恢复为仅兜底模式：只有当前焦点明确写入失败时才复制。无法确认写入结果时，不会自动重试或复制，因为文本仍可能已写入编辑器。
 
-应使用 HTTPS。音频和待处理文本分别直接发送到配置的 Base URL；Dictate 不提供 API、代理或账号系统。转写、公共改写 API 和各提示词的独立 API Key 使用 Android Keystore 中的 AES 密钥分别加密，导出不含密钥。提示词密钥按稳定的条目 ID 保存，改名和排序不改变归属，删除条目时一并清理。
+应使用 HTTPS。音频和待处理文本分别直接发送到配置的 Base URL；Dictate 不提供 API、代理或账号系统。转写、公共改写 API、各提示词的独立 API Key，以及 Advanced Audio API 的工作流和远端存储密钥均使用 Android Keystore 中的 AES 密钥分别加密，导出不含密钥。提示词密钥按稳定的条目 ID 保存，改名和排序不改变归属，删除条目时一并清理。
 
-导入密钥需要明确确认，包括提示词中可选的 `apiKey`。导入条目未提供 `apiKey` 时，只有条目 ID、Provider 和去掉首尾空白的 Base URL 均与现有条目一致，才保留原密钥；否则密钥为空。显式提供空字符串 `apiKey` 会清除已有密钥。
+导入任何密钥都需要明确确认，包括提示词中可选的 `apiKey` 和 `advancedAudio.secrets` 映射。导入条目未提供 `apiKey` 时，只有条目 ID、Provider 和去掉首尾空白的 Base URL 均与现有条目一致，才保留原密钥；否则密钥为空。显式提供空字符串 `apiKey` 会清除已有密钥。若导入文件省略 `advancedAudio.secrets`，只有不含密钥的 `advancedAudio` 配置与现有配置完全一致时才保留已有高级密钥；否则会清除。
 
 ## 许可证
 

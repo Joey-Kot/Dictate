@@ -4,36 +4,41 @@ English | [简体中文](README_ZH.md)
 
 Dictate is an Android speech transcription and selected-text post-processing tool operated through an accessibility floating button that does not steal focus. Audio or selected text is sent directly to the service specified by the user, with one task executed at a time. Transcription and post-processing share the same write rule: if there is no selection when writing, the text is inserted at the current cursor position; if there is an editable selection, that portion of text is replaced.
 
+## Downloads
+
+| Platform | Download | SHA-256 |
+|---|---|---|
+| arm64-v8a | [arm64-v8a](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk) | [sha256](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk.sha256) |
+
 ## Demo and Configuration
 
 | [<img src="demo/Demo-EN.gif" alt="Dictate in action in English" width="320">](demo/Demo-EN.gif) |
 | :---: |
 | **Dictate in action**<br>Use the floating button to transcribe speech, then select text and apply your own prompts to rewrite or translate it. |
 
-| [![Permissions](demo/1.%20Permissions.png)](demo/1.%20Permissions.png) | [![UI language](demo/2.%20UI%20language.png)](demo/2.%20UI%20language.png) |
-| :---: | :---: |
-| **1. Permissions**<br>Enable the accessibility service and grant microphone permission. | **2. UI language**<br>Choose English, Chinese, Japanese, German, French, or Russian, then save to apply. |
-| [![Audio Record Settings](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) | [![Audio API Settings](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) |
-| **3. Audio Record Settings**<br>Choose the output sample rate, codec, container, and bitrate. | **4. Audio API Settings**<br>Set the transcription Base URL, API Key, model, and additional JSON parameters; test with a real transcription request. |
-| [![Rewrite API Settings](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![Prompt editor](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
-| **5. Rewrite API Settings**<br>Configure the text-processing provider, Base URL, API Key, and model; manage prompt order and test the connection. | **6. Prompt editor**<br>Set each prompt's provider, icon, title, instructions, and additional JSON; inherit the main Provider or configure and test an independent API. |
-| [![Retry Settings](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![Interaction Settings](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) |
-| **7. Retry Settings**<br>Enable automatic retries and set the maximum retry count and initial delay. | **8. Interaction Settings**<br>Configure clipboard copying, the long-press threshold, and the maximum double-tap interval. |
-| [![Display Settings](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) | [![Configuration saving and import/export](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) |
-| **9. Display Settings**<br>Adjust the floating button's size, opacity, and state colors, and manage notification settings. | **10. Save, import, and export**<br>Save settings, import or export JSON configuration, and view or clear diagnostics. |
+| [![Permissions](demo/1.%20Permissions.png)](demo/1.%20Permissions.png) | [![UI language](demo/2.%20UI%20language.png)](demo/2.%20UI%20language.png) | [![Audio Record Settings](demo/3.%20Audio%20Record%20Settings.png)](demo/3.%20Audio%20Record%20Settings.png) |
+| :---: | :---: | :---: |
+| **1. Permissions**<br>Enable the accessibility service and grant microphone permission. | **2. UI language**<br>Choose English, Chinese, Japanese, German, French, or Russian, then save to apply. | **3. Audio Record Settings**<br>Choose the output sample rate, codec, container, and bitrate. |
+| [![Audio API Settings](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) | [![Rewrite API Settings](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![Prompt editor](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
+| **4. Audio API Settings**<br>Set the transcription Base URL, API Key, model, and additional JSON parameters; test with a real transcription request. | **5. Rewrite API Settings**<br>Configure the text-processing provider, Base URL, API Key, and model; manage prompt order and test the connection. | **6. Prompt editor**<br>Set each prompt's provider, icon, title, instructions, and additional JSON; inherit the main Provider or configure and test an independent API. |
+| [![Retry Settings](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![Interaction Settings](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) | [![Display Settings](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) |
+| **7. Retry Settings**<br>Enable automatic retries and set the maximum retry count and initial delay. | **8. Interaction Settings**<br>Configure clipboard copying, the long-press threshold, and the maximum double-tap interval. | **9. Display Settings**<br>Adjust the floating button's size, opacity, and state colors, and manage notification settings. |
+| [![Configuration saving and import/export](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) | [![Advanced Audio API Settings](demo/11.%20Advanced%20Audio%20API%20Settings.png)](demo/11.%20Advanced%20Audio%20API%20Settings.png) | [![Generate workflow](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png)](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png) |
+| **10. Save, import, and export**<br>Save settings, import or export JSON configuration, and view or clear diagnostics. | **11. Advanced Custom Audio API Provider**<br>Generate and validate declarative ASR provider workflows from separate user requirements and vendor materials. It provides typed, conditional, single-select, and multi-select controls, and supports single requests, streamed responses, async polling, and WebSocket realtime transcription. | **12. Generate workflow**<br>Paste vendor documentation or request examples, describe the parameters to use, and generate a custom Audio API Provider workflow. |
+| [![Workflow JSON and summary](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png)](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png) | [![Dynamic parameters and secrets](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png)](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png) | [![Remote audio configuration](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png)](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png) |
+| **13. Workflow JSON and summary**<br>Review the generated JSON and summary. | **14. Dynamic parameters and secrets**<br>Workflow-declared typed controls appear after validation; Remote audio appears only when the workflow requires it. | **15. Remote audio configuration**<br>Configure WebDAV, S3-compatible, or Aliyun OSS when audio must be delivered by public URL or cloud URI. |
+|  | [![Workflow endpoint test](demo/16.%20Successfully%20tested%20the%20workflow%20API.png)](demo/16.%20Successfully%20tested%20the%20workflow%20API.png) |  |
+|  | **16. Workflow endpoint test**<br>Test the current workflow draft with its declared values and secrets against the real endpoint. |  |
 
 ## Introduction to the Audio Transcription Feature
 
-- Non-IME format, with no keyboard, candidate bar, history list, cloud account, or proxy service.
-- `AudioRecord` PCM capture at the active input route's selected sample rate, in 16-bit mono, with pause/resume, microphone foreground service, wake lock, and cancellation.
-- Draggable, non-focusable accessibility overlay with persisted, inset-aware screen position; its size, opacity, and recording/paused/processing color scheme are configurable and update without restarting the accessibility service.
-- An in-progress recording continues while the screen is off; no lock-screen controls or lock-screen text insertion are provided.
-- Build FFmpeg `8.1` with Opus, LAME, Vorbis, AMR-NB/WB, and Speex from verified source archives; currently, only `arm64-v8a` binaries are provided.
-- 28 audio encoding choices, including lossless formats, speech codecs, WMA, ADPCM, and integer/floating-point PCM. Settings show compatible rates, bit depths, containers, and bitrates; conversion happens after recording. Automatic output adapts to the encoder and capture rate, capped at 48 kHz.
-- Send multipart requests directly to the OpenAI-Compatible `/v1/audio/transcriptions`; successful responses must contain a non-empty top-level `text` string. Support for APIs other than OpenAI-Compatible is not currently considered. If you need services from other providers, you may use any compatible conversion service to convert them for use as OpenAI-Compatible.
-- The clipboard safety copy is enabled by default; when disabled, clipboard is used only after an explicit insertion failure.
-- Cancellable FFmpeg process, HTTP request, and exponential retry wait, all protected by a monotonically increasing task ID.
-- Keystore-backed API Key encryption, redacted diagnostics, real endpoint test, and validated JSON import/export.
+- **Audio transcription**: Works outside the IME through a floating button that does not take focus. Supports pausing, canceling, and retranscribing the most recent recording, including with the screen off.
+- **Text rewriting**: Configure prompts, providers, models, and parameters. After selecting text, long-press the floating button to choose and invoke a rewrite action.
+- **Custom APIs**: Configure standard OpenAI-compatible audio APIs and Rewrite APIs from different providers, together with models, prompts, and additional request parameters.
+- **Advanced Custom Audio API Provider**: Generate and validate declarative ASR Provider workflows from separate user requirements and vendor documentation. Provides typed controls, conditional visibility, single-select and multi-select controls, and supports one-shot requests, streamed responses, asynchronous polling, and real-time WebSocket transcription.
+- **Automatic insertion**: Transcription and rewrite results are inserted at the active cursor or replace the current editable selection. A clipboard copy is retained by default; when that option is disabled, the clipboard is used only as a fallback after a confirmed write failure.
+- **Audio processing**: Choose recording and output formats; FFmpeg is bundled, with no separate installation required.
+- **Task and configuration security**: Transcoding, network requests, and retries can all be canceled. API keys, workflows, and remote-storage credentials are encrypted with Android Keystore, with support for redacted diagnostics, live endpoint testing, and validated JSON import and export.
 
 ### Introduction to the selected-text processing feature
 
@@ -58,12 +63,6 @@ Gesture precedence is `drag > hold > double tap > tap`. A hold is confirmed on r
 
 The prompt menu expands smoothly from the button into a rounded, translucent, vertically scrolling panel. Tapping outside collapses it to the idle microphone button; choosing a prompt collapses it and enters processing. With no saved prompts, a hold resends the previous recording even when text is selected.
 
-## Downloads
-
-| Platform | Download | SHA-256 |
-|---|---|---|
-| arm64-v8a | [arm64-v8a](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk) | [sha256](https://github.com/Joey-Kot/Dictate/releases/download/Latest/Dictate-latest-arm64-v8a.apk.sha256) |
-
 ## Architecture
 
 ```mermaid
@@ -74,10 +73,19 @@ flowchart LR
   L --> C
   C --> D["AudioRecord"]
   C --> E["Embedded FFmpeg CLI"]
-  C --> F["HttpURLConnection"]
-  F --> G["User Base URL"]
+  C --> F["Legacy OpenAI-compatible<br/>HttpURLConnection"]
+  F --> G["User standard API URL"]
+  C --> AA["AdvancedAudioClient<br/>validate + render workflow"]
+  AA --> OH["OkHttp HTTP<br/>request / stream / async poll"]
+  OH --> V["Vendor API"]
+  AA --> RA["RemoteAudioPublisher"]
+  RA --> RS["WebDAV / S3-compatible / OSS"]
+  D --> RT["Bounded PCM tee<br/>Advanced realtime"]
+  RT --> WS["OkHttp WebSocket"]
+  WS --> V
   C --> H["Post-processing providers and JSON merge"]
-  H --> F
+  H --> PH["Provider-specific post-processing HTTP"]
+  PH --> PV["Post-processing provider API"]
   C --> T["TextDelivery"]
   T --> W["Accessibility insertion pipeline"]
   W -->|"Android 13+"| M["AccessibilityInputConnection<br/>commitText + verification"]
@@ -87,7 +95,7 @@ flowchart LR
   T -->|"always copy enabled<br/>or direct insertion explicitly failed"| I["Clipboard"]
   I -->|"direct insertion explicitly failed"| P["ACTION_PASTE"]
   P --> X
-  J["Settings"] --> K["Preferences + Keystore"]
+  J["Settings<br/>standard + Advanced workflow"] --> K["Preferences + Keystore"]
 ```
 
 ## Request Sequence
@@ -99,13 +107,15 @@ sequenceDiagram
   participant J as VoiceJobController
   participant R as AudioRecord
   participant F as FFmpeg
-  participant P as Endpoint
+  participant V as Transcription service
+  participant P as Post-processing provider
+  participant S as Remote storage
   participant D as TextDelivery
   participant A as Accessibility
   participant E as Current editor
   participant C as Clipboard
 
-  alt Voice transcription
+  alt Legacy voice transcription
     U->>O: Tap
     O->>J: Start recording
     J->>R: Record route-selected-rate mono PCM
@@ -113,7 +123,32 @@ sequenceDiagram
     O->>J: Stop and transcribe
     J->>R: Stop and retain raw audio
     J->>F: Transcode with current settings
-    J->>P: POST transcription request
+    J->>V: POST OpenAI-compatible transcription request
+    V-->>J: Final response text
+  else Advanced non-realtime voice transcription
+    U->>O: Tap, then tap again
+    O->>J: Record, stop, and retain raw audio
+    J->>F: Transcode with current settings
+    opt Workflow requires a remote audio reference
+      J->>S: Publish encoded audio
+      S-->>J: Public HTTPS URL or cloud URI
+    end
+    J->>V: Validated request, stream, or async workflow
+    Note over J,V: Poll/result may retry, but submit is never retried
+    V-->>J: Final response text
+  else Advanced realtime voice transcription
+    U->>O: Tap
+    O->>J: Start recording
+    J->>R: Keep local PCM and attach a bounded tee
+    J->>V: Open WebSocket and send initial messages
+    R->>V: PCM chunks
+    U->>O: Tap
+    O->>J: Stop recording
+    J->>V: Send finish and await explicit completion
+    opt Live session fails, falls behind, or ends incomplete
+      J->>V: Replay complete local PCM from zero
+    end
+    V-->>J: Final response text
   else Text selected and saved prompts exist
     U->>O: Hold idle button
     O->>A: Read current selected text
@@ -122,8 +157,8 @@ sequenceDiagram
     U->>O: Choose a prompt
     O->>J: Submit input text and prompt
     J->>P: Merge prompt JSON and send post-processing request
+    P-->>J: Final response text
   end
-  P-->>J: Response text
 
   J->>J: Remain requesting and enter delivery phase
   J->>D: Deliver text with job and cancellation guard
@@ -176,9 +211,9 @@ stateDiagram-v2
   Idle --> Requesting: choose post-processing prompt
   Recording --> Paused
   Paused --> Recording
-  Recording --> Transcoding
+  Recording --> Transcoding: stop
   Transcoding --> Requesting
-  Requesting --> RetryWaiting
+  Requesting --> RetryWaiting: legacy, post-processing, or realtime replay retry
   RetryWaiting --> Requesting
   Requesting --> Idle: request or delivery ends
   Transcoding --> Idle
@@ -188,19 +223,24 @@ stateDiagram-v2
   Requesting --> Idle: cancel/keep raw
   RetryWaiting --> Idle: cancel/keep raw
   note right of Requesting
-    Includes HTTP request, insertion verification,
-    always-copy safety copy, or explicit-failure
-    clipboard and paste fallback
+    Includes legacy and Advanced HTTP stages,
+    remote upload and cleanup, stream/poll/result,
+    realtime finalization or PCM replay, insertion
+    verification, safety copy, and paste fallback
+  end note
+  note right of Paused
+    Advanced realtime finishes its current session
+    resume starts a new session or falls back to replay
   end note
 ```
 
-Internal task states remain idle, recording, paused, transcoding, requesting, and retry waiting. The menu is an idle presentation state and starts no request. Post-processing enters requesting directly, without recording or transcoding; success, failure, and cancellation do not replace the previous recording.
+Internal task states remain idle, recording, paused, transcoding, requesting, and retry waiting. Advanced HTTP stages reuse requesting; their phase-level retries never enter retry waiting or resubmit an async task. Realtime PCM replay retries use retry waiting and restart from byte zero. The menu is an idle presentation state and starts no request. Post-processing enters requesting directly, without recording or transcoding; success, failure, and cancellation do not replace the previous recording.
 
 ## Requirements
 
 - Android 8.0+ (`minSdk 26`) on an `arm64-v8a` device.
 - Enabled Dictate accessibility service; recording additionally needs microphone permission.
-- Transcription needs an OpenAI-compatible `POST /v1/audio/transcriptions` endpoint, Base URL, API Key, and model.
+- Transcription needs either an OpenAI-compatible `POST /v1/audio/transcriptions` endpoint, Base URL, API Key, and model, or an enabled validated Advanced Audio API workflow with its declared values and secrets.
 - Post-processing needs valid Provider, Base URL, API Key, and model settings, either shared or configured per prompt, and at least one saved prompt.
 
 Selection reading and text delivery depend on the target application's accessibility support. Read-only selections can supply post-processing input; password fields, protected screens, and custom controls may hide selections or reject writing. The existing clipboard fallback handles unavailable editable focus. Dictate does not contain per-app compatibility logic.
@@ -215,11 +255,10 @@ Use JDK 17, Android SDK Platform 35, Build Tools 35.0.0, and NDK `27.2.12479018`
 export ANDROID_HOME=/path/to/android-sdk
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 export GRADLE_USER_HOME=/tmp/gradle-user-home
-./scripts/build-android-ffmpeg.sh
 ./gradlew :app:assembleDebug
 ```
 
-The FFmpeg script writes `app/src/main/jniLibs/arm64-v8a/libffmpeg.so`, which is required for voice transcription at runtime. A Gradle Debug build alone does not generate FFmpeg. Signed releases additionally use `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+`assembleDebug` automatically runs `scripts/build-android-ffmpeg.sh` when its arm64 FFmpeg binary is missing or the script has changed, then packages the result at `app/src/main/jniLibs/arm64-v8a/libffmpeg.so`. This requires an installed Android NDK exposed through `ANDROID_NDK_HOME` or `ANDROID_NDK_ROOT`; the generated binary is reused by unchanged Debug builds. The script remains available for an explicit native-only rebuild. Signed releases additionally use `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
 
 Release builds enable R8 code shrinking, optimization, obfuscation, and resource shrinking. CI archives `mapping.txt` as a workflow artifact for recovering original crash stack traces. Debug builds remain unminified.
 
@@ -251,16 +290,22 @@ GitHub Actions is the default release path. Pushes to `main` and `dev`, plus man
 ## How to use (Configure)
 
 1. Grant microphone permission and enable Dictate in Android accessibility settings. Notifications can be enabled or disabled from the switch in **Display Settings**.
-2. Enter Base URL (`https://example.com` or `https://example.com/v1`), API Key, and model.
-3. Optionally add a complete JSON object using the merge rules below. Objects and arrays are serialized as JSON multipart field values, and `model` can be overridden. `file` is the binary audio attachment, so an additional field with that name reports a conflict.
-4. Run the real endpoint test, which transcodes an embedded short spoken clip with current audio settings and calls the transcription endpoint—not `/v1/models`.
+2. For the usual route, enter Base URL (`https://example.com` or `https://example.com/v1`), API Key, and model. Alternatively, enable **Advanced Audio API Settings**, paste or generate a validated workflow, and fill its declared values and secrets.
+3. The usual route can optionally add a complete JSON object using the merge rules below. Objects and arrays are serialized as JSON multipart field values, and `model` can be overridden. `file` is the binary audio attachment, so an additional field with that name reports a conflict.
+4. Run the real endpoint test. The usual route transcodes an embedded short spoken clip and calls the transcription endpoint—not `/v1/models`; Advanced uses the current workflow draft and its values and secrets.
 5. Optionally set the floating button's size, opacity, and a preset or custom three-state color scheme; then save, keep a cursor in an ordinary editable field, and use the floating button.
 
 The Language section appears above Audio Record Settings. It defaults to English, regardless of the system language, and offers English, 中文, 日本語, Deutsch, Français, and Русский in that order. Choose a language and tap Save settings to apply it to the interface, dialogs, status messages, and recording notifications. This setting does not change the transcription language or user-supplied prompts and API parameters.
 
-The settings sections have no numbers: Audio Record Settings, Audio API Settings, Rewrite API Settings, Retry Settings, Interaction Settings, and Display Settings. Titles are translated into the selected interface language. About at the bottom lists the author, email, license, repository, and the installed build's version.
+The settings sections have no numbers: Audio Record Settings, Audio API Settings, Rewrite API Settings, Advanced Audio API Settings, Retry Settings, Interaction Settings, and Display Settings. Titles are translated into the selected interface language. About at the bottom lists the author, email, license, repository, and the installed build's version.
 
 The notification switch reflects the system's actual app and recording-channel settings. Tap it to open system notification settings; its state refreshes when you return. Disabling notifications does not stop recording. On Android 13 and newer, the system may still show the running foreground service in its task manager even when notification-drawer notifications are disabled. This system setting is not part of exported app configuration.
+
+### Advanced Audio API settings
+
+Enable this opt-in mode when the usual OpenAI-compatible transcription route does not cover a provider's protocol. Paste a compatible declarative workflow, or describe the requirement and provide vendor documentation or request examples to generate one. Validate and apply the workflow before filling its dynamically generated values and secrets.
+
+Remote audio settings appear only when the validated workflow delivers audio by public HTTPS URL or cloud URI. Choose WebDAV, S3-compatible storage, or Aliyun OSS when required. **Test workflow** uses the current, unsaved draft together with its declared values and secrets against the real endpoint.
 
 ### Audio encoding settings
 
@@ -329,13 +374,13 @@ For example, this per-prompt configuration selects `another-model` and removes `
 
 The Model from the selected shared or independent API configuration is a default; validation uses the model after merging. Google's final model is used in its request URL. Additional fields must follow the selected provider's API format; deleting a required field can produce a configuration or server error.
 
-Exports use `schemaVersion: 6`, with exact `audioOutput.bitrateBps`, the interface `language` tag, post-processing settings, ordered prompts with optional independent API settings, and custom icons. A prompt's `provider` is `null` for inheritance; independent configurations store `provider`, `baseUrl`, and `model`. Imports continue to accept versions 1–5; versions 1–4 have their `bitrateKbps` converted to bits per second. Existing PCM/WAV settings, including unsigned 8-bit output, are retained. Legacy Opus selections of 32/44.1 kHz migrate to 48 kHz, matching their previous encoded output. Versions 1–3 default to an empty prompt list; prompts without a `provider` inherit the main API, and configurations without a `language` field default to English. Invalid encoding combinations are rejected before applying an import.
+Exports use `schemaVersion: 7`, with exact `audioOutput.bitrateBps`, the interface `language` tag, post-processing settings, ordered prompts with optional independent API settings, custom icons, and non-secret `advancedAudio` settings. A prompt's `provider` is `null` for inheritance; independent configurations store `provider`, `baseUrl`, and `model`. Imports accept versions 1–7; version 7 requires `advancedAudio`, while versions 1–4 have their `bitrateKbps` converted to bits per second. Existing PCM/WAV settings, including unsigned 8-bit output, are retained. Legacy Opus selections of 32/44.1 kHz migrate to 48 kHz, matching their previous encoded output. Versions 1–3 default to an empty prompt list; prompts without a `provider` inherit the main API, and configurations without a `language` field default to English. Invalid encoding combinations are rejected before applying an import.
 
 The clipboard safety copy is enabled by default. Turning it off restores fallback-only behavior: Dictate copies only when current-focus insertion explicitly fails. An unconfirmed insertion is never retried or copied automatically in that mode, because it may still have reached the editor.
 
-Use HTTPS. Audio and selected text go directly to their configured Base URLs. Dictate provides no API, proxy, or account system. Transcription, shared Rewrite API, and independent prompt API Keys are separately encrypted using an AES key held by Android Keystore and omitted from exports. Prompt keys follow stable prompt IDs through renaming and reordering and are removed when their prompt is deleted.
+Use HTTPS. Audio and selected text go directly to their configured Base URLs. Dictate provides no API, proxy, or account system. Transcription, shared Rewrite API, independent prompt API Keys, and Advanced Audio workflow or remote-storage secrets are separately encrypted using an AES key held by Android Keystore and omitted from exports. Prompt keys follow stable prompt IDs through renaming and reordering and are removed when their prompt is deleted.
 
-Importing keys, including a prompt's optional `apiKey`, requires explicit confirmation. When an imported prompt omits `apiKey`, an existing key is retained only if its ID, Provider, and Base URL (after trimming surrounding whitespace) all match; otherwise its key is empty. An explicitly empty `apiKey` clears the stored key.
+Importing any key, including a prompt's optional `apiKey` or an `advancedAudio.secrets` map, requires explicit confirmation. When an imported prompt omits `apiKey`, an existing key is retained only if its ID, Provider, and Base URL (after trimming surrounding whitespace) all match; otherwise its key is empty. An explicitly empty `apiKey` clears the stored key. When `advancedAudio.secrets` is omitted, existing Advanced Audio secrets are retained only when the non-secret `advancedAudio` configuration is unchanged; otherwise they are cleared.
 
 ## License
 

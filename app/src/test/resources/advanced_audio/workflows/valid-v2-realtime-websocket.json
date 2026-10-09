@@ -1,0 +1,84 @@
+{
+  "schema_version": 2,
+  "name": "Realtime WebSocket transcription",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "realtime-asr",
+      "type": "text"
+    }
+  ],
+  "secrets": [
+    {
+      "id": "api_key",
+      "label": "API key",
+      "required": true
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "realtime_chunks"
+    }
+  },
+  "recognition": {
+    "mode": "realtime_session",
+    "realtime": {
+      "transport": "websocket",
+      "connect": {
+        "url": "wss://realtime.example.test/v1/transcriptions",
+        "headers": {
+          "Authorization": "Bearer {{secret:api_key}}"
+        }
+      },
+      "initial_messages": [
+        {
+          "type": "json",
+          "value": {
+            "type": "start",
+            "model": "{{var:model}}"
+          }
+        }
+      ],
+      "audio_stream": {
+        "codec": "pcm_s16le",
+        "sample_rate": 16000,
+        "channels": 1,
+        "chunk_duration_ms": 100,
+        "pacing": "realtime"
+      },
+      "audio_message": {
+        "type": "json",
+        "value": {
+          "type": "audio",
+          "audio": "{{audio:chunk_base64}}"
+        }
+      },
+      "receive_rules": [
+        {
+          "event": "partial",
+          "path": "$.text",
+          "action": "replace_partial"
+        },
+        {
+          "event": "final",
+          "path": "$.text",
+          "action": "set_final_text"
+        }
+      ],
+      "finish_messages": [
+        {
+          "type": "json",
+          "value": {
+            "type": "finish"
+          }
+        }
+      ],
+      "completion": {
+        "event": "completed"
+      },
+      "pause_behavior": "restart_session",
+      "finalization_timeout_ms": 15000
+    }
+  }
+}

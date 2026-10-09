@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "name": "Capture-only URL with a suffix has no literal HTTP(S) prefix",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "asr",
+      "type": "text"
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    }
+  },
+  "recognition": {
+    "mode": "async_poll",
+    "submit": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/tasks",
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "audio": "{{audio:base64}}"
+        }
+      },
+      "captures": [
+        {
+          "id": "result_url",
+          "from": {
+            "type": "json_path",
+            "path": "$.result_url"
+          },
+          "sensitive": true
+        }
+      ]
+    },
+    "result_steps": [
+      {
+        "method": "GET",
+        "url": "{{capture:result_url}}/transcript"
+      }
+    ],
+    "final_text": {
+      "type": "plain_body"
+    }
+  }
+}

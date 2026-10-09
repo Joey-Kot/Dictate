@@ -1,0 +1,157 @@
+{
+  "schema_version": 2,
+  "parameters": [
+    {
+      "id": "sample_rate",
+      "label": "Sample rate",
+      "type": "integer"
+    },
+    {
+      "id": "temperature",
+      "label": "Temperature",
+      "type": "number"
+    },
+    {
+      "id": "timestamps",
+      "label": "Timestamps",
+      "type": "boolean"
+    },
+    {
+      "id": "language",
+      "label": "Language",
+      "type": "select",
+      "options": [
+        {
+          "value": "zh",
+          "label": "Chinese"
+        },
+        {
+          "value": "en",
+          "label": "English"
+        }
+      ]
+    },
+    {
+      "id": "languages",
+      "label": "Languages",
+      "type": "multi_select",
+      "options": [
+        {
+          "value": "zh",
+          "label": "Chinese"
+        },
+        {
+          "value": "en",
+          "label": "English"
+        }
+      ]
+    },
+    {
+      "id": "vocabulary",
+      "label": "Vocabulary",
+      "type": "json_object"
+    },
+    {
+      "id": "language_hints",
+      "label": "Language hints",
+      "type": "json_array"
+    }
+  ],
+  "stored_values": {
+    "sample_rate": "16000",
+    "temperature": "0.25",
+    "timestamps": "true",
+    "language": "zh",
+    "languages": "[\"zh\",\"en\"]",
+    "vocabulary": "{\"wake_phrase\":\"Dictate\"}",
+    "language_hints": "[\"zh\",\"en\"]"
+  },
+  "cases": [
+    {
+      "id": "mixed_json_string",
+      "parameter": "languages",
+      "location": "json_string",
+      "template": "languages={{var:languages}}",
+      "expected": "reject_structured_value_in_string_context"
+    },
+    {
+      "id": "http_header",
+      "parameter": "languages",
+      "location": "http_header",
+      "template": "{{var:languages}}",
+      "expected": "reject_structured_value_in_string_context"
+    },
+    {
+      "id": "form_value",
+      "parameter": "vocabulary",
+      "location": "form_urlencoded",
+      "template": "{{var:vocabulary}}",
+      "expected": "reject_structured_value_in_string_context"
+    },
+    {
+      "id": "multipart_text",
+      "parameter": "language_hints",
+      "location": "multipart_text",
+      "template": "{{var:language_hints}}",
+      "expected": "reject_structured_value_in_string_context"
+    },
+    {
+      "id": "raw_bytes",
+      "parameter": "vocabulary",
+      "location": "raw_bytes",
+      "template": "{{var:vocabulary}}",
+      "expected": "reject_structured_value_in_string_context"
+    },
+    {
+      "id": "realtime_text",
+      "parameter": "language_hints",
+      "location": "realtime_text_message",
+      "template": "{{var:language_hints}}",
+      "expected": "reject_structured_value_in_string_context"
+    }
+  ],
+  "value_parse_rejections": [
+    {
+      "parameter_id": "sample_rate",
+      "parameter_type": "integer",
+      "stored_value": "16000.5",
+      "expected": "invalid_integer"
+    },
+    {
+      "parameter_id": "temperature",
+      "parameter_type": "number",
+      "stored_value": "NaN",
+      "expected": "invalid_number"
+    },
+    {
+      "parameter_id": "timestamps",
+      "parameter_type": "boolean",
+      "stored_value": "True",
+      "expected": "invalid_boolean"
+    },
+    {
+      "parameter_id": "language",
+      "parameter_type": "select",
+      "stored_value": "fr",
+      "expected": "invalid_select_option"
+    },
+    {
+      "parameter_id": "languages",
+      "parameter_type": "multi_select",
+      "stored_value": "[\"zh\",\"zh\"]",
+      "expected": "duplicate_multi_select_option"
+    },
+    {
+      "parameter_id": "vocabulary",
+      "parameter_type": "json_object",
+      "stored_value": "[\"wrong-root\"]",
+      "expected": "invalid_json_object"
+    },
+    {
+      "parameter_id": "language_hints",
+      "parameter_type": "json_array",
+      "stored_value": "{\"wrong_root\":true}",
+      "expected": "invalid_json_array"
+    }
+  ]
+}

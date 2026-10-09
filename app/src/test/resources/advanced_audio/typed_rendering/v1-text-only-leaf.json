@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "parameters": [
+    {
+      "id": "sample_rate",
+      "label": "Sample rate"
+    }
+  ],
+  "stored_values": {
+    "sample_rate": "16000"
+  },
+  "input_json": {
+    "sample_rate": "{{var:sample_rate}}"
+  },
+  "expected_json": {
+    "sample_rate": "16000"
+  },
+  "assertions": {
+    "complete_json_leaf_is_native": false,
+    "stored_value_remains_string": true
+  }
+}

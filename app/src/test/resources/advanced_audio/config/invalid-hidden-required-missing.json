@@ -1,0 +1,65 @@
+{
+  "enabled": true,
+  "workflow": {
+    "schema_version": 2,
+    "name": "Hidden required parameter remains required",
+    "parameters": [
+      {
+        "id": "mode",
+        "label": "Mode",
+        "default": "fast",
+        "type": "select",
+        "options": [
+          {
+            "value": "fast",
+            "label": "Fast"
+          },
+          {
+            "value": "accurate",
+            "label": "Accurate"
+          }
+        ]
+      },
+      {
+        "id": "custom_vocabulary",
+        "label": "Custom vocabulary",
+        "required": true,
+        "type": "json_object",
+        "visible_when": {
+          "parameter": "mode",
+          "equals": "accurate"
+        }
+      }
+    ],
+    "secrets": [],
+    "audio": {
+      "delivery": {
+        "type": "base64"
+      }
+    },
+    "recognition": {
+      "mode": "request",
+      "request": {
+        "method": "POST",
+        "url": "https://asr.example.test/v1/transcriptions",
+        "body": {
+          "type": "json",
+          "value": {
+            "mode": "{{var:mode}}",
+            "custom_vocabulary": "{{var:custom_vocabulary}}",
+            "audio": "{{audio:base64}}"
+          }
+        }
+      },
+      "final_text": {
+        "type": "json_path",
+        "path": "$.text"
+      }
+    }
+  },
+  "values": {},
+  "secrets": {},
+  "remote_audio": {
+    "type": "none"
+  }
+}

@@ -51,7 +51,6 @@ class RecordingService : Service() {
             }
         }
     }
-    private var sawActiveRecordingConfiguration = false
     private var lastRecordingConfigurationSummary: String? = null
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: List<AudioRecordingConfiguration>) {
@@ -60,13 +59,10 @@ class RecordingService : Service() {
             val sessionId = currentRecorder.audioSessionId()
             val ownConfiguration = configs.firstOrNull { it.clientAudioSessionId == sessionId }
             if (ownConfiguration != null) {
-                sawActiveRecordingConfiguration = true
                 reportRecordingConfiguration(activeJobId, ownConfiguration)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ownConfiguration.isClientSilenced) {
                     currentRecorder.fail(AppStrings.get(R.string.runtime_microphone_busy, "The microphone is in use by another app or the system"))
                 }
-            } else if (sawActiveRecordingConfiguration) {
-                currentRecorder.fail(AppStrings.get(R.string.runtime_microphone_interrupted, "Microphone recording was interrupted by the system"))
             }
         }
     }
@@ -119,7 +115,11 @@ class RecordingService : Service() {
             "recording",
             "job=$jobId source=$sourceName client=${format.summary()}",
         )
-        applicationState.voiceJobController.onRecordingStarted(jobId, format)
+        // AudioRecorder invokes this before AudioRecord starts sampling.
+        // Attach an optional Advanced realtime tee here so the first locally
+        // written PCM block cannot precede the live session's source.
+        val liveSink = applicationState.voiceJobController.onRecordingStarted(jobId, format)
+        sourceRecorder.replacePcmPacketSink(liveSink)?.close()
     }
 
     private fun onRecorderAmplitude(jobId: Long, amplitude: Float, sourceRecorder: AudioRecorder) {
@@ -200,7 +200,6 @@ class RecordingService : Service() {
         activeJobId = jobId
         unexpectedShutdown = false
         capturePaused = false
-        sawActiveRecordingConfiguration = false
         lastRecordingConfigurationSummary = null
 
         try {
@@ -249,8 +248,14 @@ class RecordingService : Service() {
     }
 
     private fun pauseCapture() {
+        val currentRecorder = recorder ?: return
         capturePaused = true
-        if (recorder?.pause() == true) {
+        if (currentRecorder.pause()) {
+            // pause() has waited until the capture thread passed its current
+            // AudioRecord read and offered that locally-written packet. The
+            // closed tee now drains, sends finish, and completes this session.
+            currentRecorder.closePcmPacketSink()
+            applicationState.voiceJobController.onRecordingPaused(activeJobId)
             updateNotification(paused = true)
         } else {
             capturePaused = false
@@ -258,11 +263,24 @@ class RecordingService : Service() {
     }
 
     private fun resumeCapture() {
-        sawActiveRecordingConfiguration = false
+        val currentRecorder = recorder ?: return
         lastRecordingConfigurationSummary = null
-        if (recorder?.resume() == true) {
+        // A pause starts a new realtime session. The controller creates its
+        // bounded tee before microphone reads resume, preserving the local
+        // PCM file as the source of truth in either case.
+        val liveSink = currentRecorder.captureFormat()?.let { format ->
+            applicationState.voiceJobController.onRecordingResuming(activeJobId, format)
+        }
+        currentRecorder.replacePcmPacketSink(liveSink)?.close()
+        if (currentRecorder.resume()) {
             capturePaused = false
             updateNotification(paused = false)
+        } else {
+            // AudioRecorder also reports the underlying failure, but detach
+            // the just-created destination immediately so no session or tee
+            // is retained while that callback reaches the controller.
+            currentRecorder.closePcmPacketSink()
+            applicationState.voiceJobController.onRecordingResumeFailed(activeJobId)
         }
     }
 
@@ -270,7 +288,6 @@ class RecordingService : Service() {
         recorder = null
         activeJobId = NO_JOB
         capturePaused = false
-        sawActiveRecordingConfiguration = false
         lastRecordingConfigurationSummary = null
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)

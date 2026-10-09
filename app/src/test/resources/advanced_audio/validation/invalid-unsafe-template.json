@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "name": "Unsafe template namespace",
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "default": "asr",
+      "type": "text"
+    }
+  ],
+  "audio": {
+    "delivery": {
+      "type": "base64"
+    }
+  },
+  "recognition": {
+    "mode": "request",
+    "request": {
+      "method": "POST",
+      "url": "https://asr.example.test/v1/transcriptions",
+      "headers": {
+        "X-Unsafe": "{{env:HOME}}"
+      },
+      "body": {
+        "type": "json",
+        "value": {
+          "model": "{{var:model}}",
+          "audio": "{{audio:base64}}"
+        }
+      }
+    },
+    "final_text": {
+      "type": "json_path",
+      "path": "$.text"
+    }
+  }
+}

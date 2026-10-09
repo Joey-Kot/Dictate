@@ -63,7 +63,7 @@ class SettingsRepositoryDisplayTest {
 
         assertEquals(expected, repository.get().display)
         val exported = JSONObject(repository.exportJson())
-        assertEquals(6, exported.getInt("schemaVersion"))
+        assertEquals(7, exported.getInt("schemaVersion"))
         assertEquals(0.47, exported.getJSONObject("display").getDouble("buttonOpacity"), 0.0001)
         assertEquals("#123456", exported.getJSONObject("display").getJSONObject("customColors").getString("recording"))
         assertEquals(expected, repository.previewImport(exported.toString()).settings.display)

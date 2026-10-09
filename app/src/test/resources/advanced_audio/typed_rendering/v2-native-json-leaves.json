@@ -1,0 +1,112 @@
+{
+  "schema_version": 2,
+  "parameters": [
+    {
+      "id": "model",
+      "label": "Model",
+      "type": "text"
+    },
+    {
+      "id": "sample_rate",
+      "label": "Sample rate",
+      "type": "integer"
+    },
+    {
+      "id": "temperature",
+      "label": "Temperature",
+      "type": "number"
+    },
+    {
+      "id": "timestamps",
+      "label": "Timestamps",
+      "type": "boolean"
+    },
+    {
+      "id": "language",
+      "label": "Language",
+      "type": "select",
+      "options": [
+        {
+          "value": "zh",
+          "label": "Chinese"
+        },
+        {
+          "value": "en",
+          "label": "English"
+        }
+      ]
+    },
+    {
+      "id": "languages",
+      "label": "Languages",
+      "type": "multi_select",
+      "options": [
+        {
+          "value": "zh",
+          "label": "Chinese"
+        },
+        {
+          "value": "en",
+          "label": "English"
+        }
+      ]
+    },
+    {
+      "id": "vocabulary",
+      "label": "Vocabulary",
+      "type": "json_object"
+    },
+    {
+      "id": "language_hints",
+      "label": "Language hints",
+      "type": "json_array"
+    }
+  ],
+  "stored_values": {
+    "model": "qwen-audio-3.1-asr-flash",
+    "sample_rate": "16000",
+    "temperature": "0.25",
+    "timestamps": "true",
+    "language": "zh",
+    "languages": "[\"zh\",\"en\"]",
+    "vocabulary": "{\"wake_phrase\":\"Dictate\"}",
+    "language_hints": "[\"zh\",{\"language\":\"en\"}]"
+  },
+  "input_json": {
+    "model": "{{var:model}}",
+    "sample_rate": "{{var:sample_rate}}",
+    "temperature": "{{var:temperature}}",
+    "timestamps": "{{var:timestamps}}",
+    "language": "{{var:language}}",
+    "languages": "{{var:languages}}",
+    "vocabulary": "{{var:vocabulary}}",
+    "language_hints": "{{var:language_hints}}",
+    "mixed_scalar": "rate={{var:sample_rate}}"
+  },
+  "expected_json": {
+    "model": "qwen-audio-3.1-asr-flash",
+    "sample_rate": 16000,
+    "temperature": 0.25,
+    "timestamps": true,
+    "language": "zh",
+    "languages": [
+      "zh",
+      "en"
+    ],
+    "vocabulary": {
+      "wake_phrase": "Dictate"
+    },
+    "language_hints": [
+      "zh",
+      {
+        "language": "en"
+      }
+    ],
+    "mixed_scalar": "rate=16000"
+  },
+  "assertions": {
+    "stored_values_are_strings": true,
+    "native_value_only_for_complete_json_string_leaf": true,
+    "text_and_select_remain_json_strings": true
+  }
+}

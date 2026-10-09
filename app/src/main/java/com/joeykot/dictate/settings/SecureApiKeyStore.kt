@@ -95,6 +95,52 @@ class SecureApiKeyStore(
         }
     }
 
+    /** Reads one workflow or remote-audio secret by its caller-defined identifier. */
+    fun getAdvancedSecret(id: String): String {
+        val key = advancedSecretKey(id)
+        val encoded = advancedEncryptedValueOrClear(key) ?: return ""
+        return decryptOrClear(encoded) { preferences.edit().remove(key).apply() }
+    }
+
+    /**
+     * Returns every stored Advanced Audio API secret. IDs are Base64URL-encoded
+     * in preference keys, so valid workflow IDs are not constrained by the
+     * SharedPreferences key namespace.
+     */
+    fun getAdvancedSecrets(): Map<String, String> {
+        val keys = preferences.all.keys.filter { it.startsWith(KEY_ADVANCED_SECRET_PREFIX) }
+        return buildMap {
+            keys.forEach { key ->
+                val id = decodeAdvancedSecretId(key)
+                if (id == null) {
+                    preferences.edit().remove(key).apply()
+                    return@forEach
+                }
+                val encoded = advancedEncryptedValueOrClear(key) ?: return@forEach
+                val value = decryptOrClear(encoded) { preferences.edit().remove(key).apply() }
+                if (value.isNotEmpty()) put(id, value)
+            }
+        }
+    }
+
+    /**
+     * Replaces the Advanced Audio API secret namespace in the same preference
+     * transaction as its public configuration. Empty values remove their IDs.
+     */
+    fun stageAdvancedSecrets(editor: SharedPreferences.Editor, values: Map<String, String>) {
+        require(values.keys.all { it.isNotEmpty() }) { "An Advanced Audio API secret ID cannot be empty" }
+        val encrypted = values.mapValues { encrypt(it.value) }
+        val ids = values.keys
+        preferences.all.keys
+            .filter { it.startsWith(KEY_ADVANCED_SECRET_PREFIX) }
+            .filter { key -> decodeAdvancedSecretId(key) !in ids }
+            .forEach { editor.remove(it) }
+        encrypted.forEach { (id, value) ->
+            val key = advancedSecretKey(id)
+            if (value == null) editor.remove(key) else editor.putString(key, value)
+        }
+    }
+
     private fun encrypt(value: String): String? {
         if (value.isEmpty()) return null
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -137,10 +183,45 @@ class SecureApiKeyStore(
         return generator.generateKey()
     }
 
+    private fun advancedSecretKey(id: String): String =
+        KEY_ADVANCED_SECRET_PREFIX + Base64.encodeToString(
+            id.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
+        )
+
+    private fun decodeAdvancedSecretId(key: String): String? = runCatching {
+        require(key.startsWith(KEY_ADVANCED_SECRET_PREFIX))
+        val encodedId = key.removePrefix(KEY_ADVANCED_SECRET_PREFIX)
+        require(encodedId.isNotEmpty())
+        val id = String(
+            Base64.decode(encodedId, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING),
+            Charsets.UTF_8,
+        )
+        require(id.isNotEmpty())
+        // Ignore malformed or non-canonical foreign keys in our namespace.
+        // This keeps arbitrary SharedPreferences corruption from being exposed
+        // as a workflow secret identifier.
+        require(advancedSecretKey(id) == key)
+        id
+    }.getOrNull()
+
+    /**
+     * A damaged value in the Advanced namespace must never prevent the legacy
+     * transcription configuration from loading. It is safe to discard because
+     * all valid values in this namespace are encrypted strings written here.
+     */
+    private fun advancedEncryptedValueOrClear(key: String): String? = try {
+        preferences.getString(key, null)
+    } catch (_: ClassCastException) {
+        preferences.edit().remove(key).apply()
+        null
+    }
+
     private companion object {
         const val KEY_VALUE = "secure.api_key_ciphertext"
         const val KEY_POST_PROCESSING_VALUE = "secure.post_processing_api_key_ciphertext"
         const val KEY_PROMPT_PREFIX = "secure.prompt_api_key_ciphertext."
+        const val KEY_ADVANCED_SECRET_PREFIX = "secure.advanced_audio_secret_ciphertext."
         const val KEY_MIGRATION_COMPLETE = "secure.api_key_migrated"
         const val LEGACY_PREFS_NAME = "secure_settings"
         const val LEGACY_KEY_VALUE = "api_key_ciphertext"
