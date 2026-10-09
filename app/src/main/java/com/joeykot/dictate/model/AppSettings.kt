@@ -28,6 +28,50 @@ data class RetryConfig(
     }
 }
 
+/**
+ * Global controls for splitting a completed, non-realtime recording into
+ * independent recognition requests. The values remain valid even while the
+ * feature is disabled so enabling it never has to repair a stale draft.
+ */
+data class SegmentedUploadConfig(
+    val enabled: Boolean = false,
+    val maximumSegmentLengthSeconds: Int = DEFAULT_MAXIMUM_SEGMENT_LENGTH_SECONDS,
+    val minimumPauseDurationMillis: Int = DEFAULT_MINIMUM_PAUSE_DURATION_MILLIS,
+    val concurrency: Int = DEFAULT_CONCURRENCY,
+) {
+    fun validate(): List<String> = buildList {
+        if (maximumSegmentLengthSeconds <= 0) {
+            add(AppStrings.get(R.string.settings_segment_maximum_length, "Maximum segment length must be a positive integer"))
+        }
+        if (minimumPauseDurationMillis <= 0) {
+            add(AppStrings.get(R.string.settings_segment_minimum_pause, "Minimum pause duration must be a positive integer"))
+        }
+        if (concurrency !in 1..MAX_CONCURRENCY) {
+            add(
+                AppStrings.get(
+                    R.string.settings_segment_concurrency,
+                    "Segment upload concurrency must be between 1 and %1\$d",
+                    MAX_CONCURRENCY,
+                ),
+            )
+        }
+    }
+
+    companion object {
+        const val DEFAULT_MAXIMUM_SEGMENT_LENGTH_SECONDS = 495
+        const val DEFAULT_MINIMUM_PAUSE_DURATION_MILLIS = 700
+        const val DEFAULT_CONCURRENCY = 1
+
+        /**
+         * Android runs every active segment workflow on a dedicated Java
+         * thread. Keep an explicit ceiling so imported settings cannot create
+         * an unbounded thread pool, while allowing high-throughput backends
+         * to use the requested parallelism.
+         */
+        const val MAX_CONCURRENCY = 50
+    }
+}
+
 data class InteractionConfig(
     val longPressMs: Long = 1_500L,
     val doubleTapMs: Long = 500L,
@@ -142,6 +186,7 @@ data class AppSettings(
     val audio: AudioConfig = AudioConfig(),
     val provider: ProviderConfig = ProviderConfig(),
     val retry: RetryConfig = RetryConfig(),
+    val segmentedUpload: SegmentedUploadConfig = SegmentedUploadConfig(),
     val interaction: InteractionConfig = InteractionConfig(),
     val display: DisplayConfig = DisplayConfig(),
     val postProcessing: PostProcessingConfig = PostProcessingConfig(),

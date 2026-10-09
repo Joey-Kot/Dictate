@@ -4,6 +4,9 @@
     <string name="settings_sample_rate_unsupported">Nicht unterstützte Abtastrate</string>
     <string name="settings_max_retries">Die maximale Anzahl der Wiederholungen muss zwischen 0 und 10 liegen</string>
     <string name="settings_initial_backoff">Die anfängliche Wartezeit muss zwischen 0,1 und 60 Sekunden liegen</string>
+    <string name="settings_segment_maximum_length">Die maximale Segmentlänge muss eine positive ganze Zahl sein</string>
+    <string name="settings_segment_minimum_pause">Die Mindestpausendauer muss eine positive ganze Zahl sein</string>
+    <string name="settings_segment_concurrency">Die Anzahl gleichzeitiger Segment-Uploads muss zwischen 1 und %1$d liegen</string>
     <string name="settings_long_press">Die Dauer für langes Drücken muss zwischen 300 und 5000 ms liegen</string>
     <string name="settings_double_tap">Das Doppeltippintervall muss zwischen 150 und 1000 ms liegen</string>
     <string name="settings_recording_color">Die Aufnahmefarbe muss im Format #RRGGBB angegeben werden</string>
@@ -91,6 +94,7 @@
     <string name="advanced_audio_generation_invalid">Der generierte Workflow konnte nicht angewendet werden:\n%1$s</string>
     <string name="advanced_audio_secret_hint">%1$s eingeben</string>
     <string name="advanced_audio_not_set">Nicht festgelegt</string>
+    <string name="advanced_audio_selected_count">%1$d ausgewählt</string>
     <string name="advanced_audio_invalid_values">Beheben Sie diese Werte vor dem Testen:\n%1$s</string>
     <string name="advanced_audio_required_value_missing">%1$s ist erforderlich</string>
     <string name="advanced_audio_required_secret_missing">%1$s ist erforderlich</string>

@@ -8,6 +8,7 @@
     <string name="main_provider_section">音声 API 設定</string>
     <string name="main_post_processing_section">リライト API 設定</string>
     <string name="main_advanced_audio_section">高度な音声 API 設定</string>
+    <string name="main_segmented_upload_section">分割アップロード設定</string>
     <string name="main_retry_section">再試行設定</string>
     <string name="main_interaction_section">操作設定</string>
     <string name="main_display_section">表示設定</string>
@@ -38,6 +39,11 @@
     <string name="main_auto_retry">自動再試行（初期設定ではオフ）</string>
     <string name="main_max_retries">最大再試行回数</string>
     <string name="main_initial_backoff">初期待機時間（秒）</string>
+    <string name="main_enable_segmented_upload">分割アップロードを有効にする（初期設定ではオフ）</string>
+    <string name="main_maximum_segment_length">最大セグメント長（秒）</string>
+    <string name="main_minimum_pause_duration">最小ポーズ時間（ms）</string>
+    <string name="main_segment_upload_concurrency">セグメントの同時アップロード数（1–%1$d）</string>
+    <string name="main_segmented_upload_help">リアルタイムではないアップロードをポーズ位置で独立したリクエストに分割し、並行して実行します。元の録音はそのまま保持されます。</string>
     <string name="main_always_copy">結果を常にクリップボードにコピー（初期設定ではオン）</string>
     <string name="main_long_press">長押し判定時間（ms）</string>
     <string name="main_double_tap">ダブルタップの最大間隔（ms）</string>

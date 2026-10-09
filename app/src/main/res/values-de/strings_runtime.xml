@@ -56,6 +56,7 @@
     <string name="runtime_recording_interrupted">Aufnahmeaufgabe unterbrochen</string>
     <string name="runtime_recording_write_failed">Die Aufnahme kann nicht geschrieben werden</string>
     <string name="runtime_raw_recording_missing">Die Originalaufnahme fehlt oder ist leer</string>
+    <string name="runtime_no_speech_detected">Keine Sprache erkannt</string>
     <string name="runtime_ffmpeg_missing">Die App enthält keine arm64-v8a FFmpeg CLI. Bitte die vollständige Release-APK neu installieren</string>
     <string name="runtime_ffmpeg_transcode_failed">FFmpeg-Audiokonvertierung fehlgeschlagen</string>
     <string name="runtime_ffmpeg_transcode_detail">FFmpeg-Audiokonvertierung fehlgeschlagen: %1$s</string>

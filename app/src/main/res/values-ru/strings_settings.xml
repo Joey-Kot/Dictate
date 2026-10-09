@@ -4,6 +4,9 @@
     <string name="settings_sample_rate_unsupported">Неподдерживаемая частота дискретизации</string>
     <string name="settings_max_retries">Максимальное число повторов должно быть от 0 до 10</string>
     <string name="settings_initial_backoff">Начальная задержка должна быть от 0,1 до 60 секунд</string>
+    <string name="settings_segment_maximum_length">Максимальная длительность сегмента должна быть положительным целым числом</string>
+    <string name="settings_segment_minimum_pause">Минимальная длительность паузы должна быть положительным целым числом</string>
+    <string name="settings_segment_concurrency">Количество параллельных загрузок сегментов должно быть от 1 до %1$d</string>
     <string name="settings_long_press">Длительность долгого нажатия должна быть от 300 до 5000 мс</string>
     <string name="settings_double_tap">Интервал двойного нажатия должен быть от 150 до 1000 мс</string>
     <string name="settings_recording_color">Цвет записи должен быть в формате #RRGGBB</string>
@@ -91,6 +94,7 @@
     <string name="advanced_audio_generation_invalid">Не удалось применить созданный рабочий процесс:\n%1$s</string>
     <string name="advanced_audio_secret_hint">Введите %1$s</string>
     <string name="advanced_audio_not_set">Не задано</string>
+    <string name="advanced_audio_selected_count">Выбрано: %1$d</string>
     <string name="advanced_audio_invalid_values">Исправьте следующие значения перед проверкой:\n%1$s</string>
     <string name="advanced_audio_required_value_missing">%1$s обязательно</string>
     <string name="advanced_audio_required_secret_missing">%1$s обязательно</string>

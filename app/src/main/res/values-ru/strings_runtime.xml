@@ -56,6 +56,7 @@
     <string name="runtime_recording_interrupted">Задача записи прервана</string>
     <string name="runtime_recording_write_failed">Не удалось записать аудио в файл</string>
     <string name="runtime_raw_recording_missing">Исходный файл записи отсутствует или пуст</string>
+    <string name="runtime_no_speech_detected">Речь не обнаружена</string>
     <string name="runtime_ffmpeg_missing">В приложении отсутствует FFmpeg CLI для arm64-v8a. Переустановите полный релизный APK</string>
     <string name="runtime_ffmpeg_transcode_failed">Не удалось преобразовать аудио с помощью FFmpeg</string>
     <string name="runtime_ffmpeg_transcode_detail">Не удалось преобразовать аудио с помощью FFmpeg: %1$s</string>

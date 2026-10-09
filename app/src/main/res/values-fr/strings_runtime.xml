@@ -56,6 +56,7 @@
     <string name="runtime_recording_interrupted">Tâche d’enregistrement interrompue</string>
     <string name="runtime_recording_write_failed">Impossible d’écrire l’enregistrement</string>
     <string name="runtime_raw_recording_missing">Le fichier audio d’origine est manquant ou vide</string>
+    <string name="runtime_no_speech_detected">Aucune parole détectée</string>
     <string name="runtime_ffmpeg_missing">L’application ne contient pas FFmpeg CLI pour arm64-v8a. Réinstallez l’APK de version complète</string>
     <string name="runtime_ffmpeg_transcode_failed">La conversion audio FFmpeg a échoué</string>
     <string name="runtime_ffmpeg_transcode_detail">La conversion audio FFmpeg a échoué : %1$s</string>

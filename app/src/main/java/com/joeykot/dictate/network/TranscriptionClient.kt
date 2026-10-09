@@ -16,11 +16,12 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.UnknownHostException
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl.SSLException
 
 class TranscriptionClient(private val diagnostics: Diagnostics) {
@@ -67,28 +68,203 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
         data object Cancelled : Result
     }
 
+    /**
+     * Identifies one request within a logical parent recording job.  A
+     * segmented upload gives every segment its own identifier, so finishing
+     * one request cannot remove another request's connection or cancellation
+     * state.
+     */
+    data class OperationId(
+        val parentJobId: Long,
+        val requestId: Long,
+    )
+
+    /**
+     * Keeps a parent-job registration alive while a caller schedules several
+     * independently cancellable requests.  Keep this open until every
+     * started operation has drained.
+     */
+    class JobSession internal constructor(
+        private val owner: TranscriptionClient,
+        val parentJobId: Long,
+        private val state: ParentJobState,
+    ) : AutoCloseable {
+        private val closed = AtomicBoolean(false)
+        private val batchAborted = AtomicBoolean(false)
+
+        fun isCancellationRequested(): Boolean = state.cancelled.get()
+
+        fun newOperationId(): OperationId {
+            check(!closed.get()) { "The transcription job session is closed" }
+            return OperationId(parentJobId, owner.nextOperationId.incrementAndGet())
+        }
+
+        fun transcribe(request: Request): Result = transcribe(newOperationId(), request)
+
+        fun transcribe(operationId: OperationId, request: Request): Result {
+            check(!closed.get()) { "The transcription job session is closed" }
+            require(operationId.parentJobId == parentJobId) {
+                "The operation belongs to a different transcription job"
+            }
+            return owner.transcribe(state, operationId, request, batchAborted)
+        }
+
+        /**
+         * Stops currently open HTTP connections and prevents a sibling that
+         * has not registered its connection yet from starting one.  This
+         * batch-local abort intentionally does not change
+         * [isCancellationRequested], because the first segment failure must
+         * remain reportable unless the parent job itself was cancelled.
+         */
+        fun cancelInFlightOperations() {
+            batchAborted.set(true)
+            owner.disconnectActiveOperations(state)
+        }
+
+        override fun close() {
+            if (closed.compareAndSet(false, true)) owner.releaseJobSession(parentJobId, state)
+        }
+    }
+
+    /**
+     * Registers a queued legacy-transcription job before its worker starts.
+     * This keeps a cancellation that wins the gap before [openJob] attached
+     * to the intended job, without retaining a cancellation marker for an
+     * unrelated job that never starts.
+     *
+     * Close the registration when its worker finishes or is discarded before
+     * it starts. A closed registration remains usable by a worker that had
+     * already captured it, so a cancellation racing with worker dispatch is
+     * still observed when that worker opens its session.
+     */
+    class JobRegistration internal constructor(
+        internal val owner: TranscriptionClient,
+        val parentJobId: Long,
+    ) : AutoCloseable {
+        private val lock = Any()
+        private val closed = AtomicBoolean(false)
+        private var cancellationRequested = false
+        private var attachedState: ParentJobState? = null
+
+        /** Returns whether cancellation had already been requested. */
+        internal fun attach(state: ParentJobState): Boolean = synchronized(lock) {
+            attachedState = state
+            cancellationRequested
+        }
+
+        /**
+         * Marks the queued job as cancelled and returns its already attached
+         * parent state, if the worker has reached [openJob].
+         */
+        internal fun requestCancellation(): ParentJobState? = synchronized(lock) {
+            cancellationRequested = true
+            attachedState
+        }
+
+        override fun close() {
+            if (closed.compareAndSet(false, true)) owner.unregisterJob(this)
+        }
+    }
+
     private enum class Phase {
         CONNECTING,
         WRITING,
         READING,
     }
 
-    private val activeConnections = ConcurrentHashMap<Long, HttpURLConnection>()
-    private val cancelledJobs = Collections.newSetFromMap(ConcurrentHashMap<Long, Boolean>())
+    internal class ParentJobState {
+        val cancelled = AtomicBoolean(false)
+        val openSessions = AtomicInteger(0)
+        val activeOperations = AtomicInteger(0)
+        val activeConnections = ConcurrentHashMap<Long, HttpURLConnection>()
+    }
+
+    private val parentJobs = ConcurrentHashMap<Long, ParentJobState>()
+    /**
+     * Jobs whose controller worker has been queued but has not necessarily
+     * entered [openJob] yet. Registrations are explicitly released instead of
+     * leaving bare cancellation IDs behind indefinitely.
+     */
+    private val queuedJobs = ConcurrentHashMap<Long, JobRegistration>()
+    private val nextOperationId = AtomicLong()
     private val watchdog = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "dictate-http-watchdog").apply { isDaemon = true }
     }
 
+    /**
+     * Registers a worker before it is submitted so [cancel] can safely win
+     * the interval before that worker enters [openJob].
+     */
+    fun registerJob(parentJobId: Long): JobRegistration {
+        val registration = JobRegistration(this, parentJobId)
+        check(queuedJobs.putIfAbsent(parentJobId, registration) == null) {
+            "A transcription job is already queued for $parentJobId"
+        }
+        return registration
+    }
+
+    /**
+     * Opens a parent-job session for a batch of independently cancellable
+     * requests. The caller must retain and close it only after every started
+     * request has completed, including requests being drained after an error.
+     *
+     * Callers that queue work before opening the session should use
+     * [registerJob] and [openJob] with its returned registration.
+     */
+    fun openJob(parentJobId: Long): JobSession = openJob(parentJobId, registration = null)
+
+    /** Opens a session for work previously registered with [registerJob]. */
+    fun openJob(registration: JobRegistration): JobSession {
+        check(registration.owner === this) { "The transcription job registration belongs to a different client" }
+        return openJob(registration.parentJobId, registration)
+    }
+
+    private fun openJob(parentJobId: Long, registration: JobRegistration?): JobSession {
+        val state = parentJobs.compute(parentJobId) { _, existing ->
+            (existing ?: ParentJobState()).also { it.openSessions.incrementAndGet() }
+        } ?: error("Unable to create the transcription job session")
+        if (registration?.attach(state) == true) cancelParentJob(state)
+        registration?.let { queuedJobs.remove(parentJobId, it) }
+        return JobSession(this, parentJobId, state)
+    }
+
+    /** Preserves the single-file call path used by non-segmented recording. */
     fun transcribe(jobId: Long, request: Request): Result {
-        if (cancelledJobs.remove(jobId)) return Result.Cancelled
+        val session = openJob(jobId)
+        return try {
+            session.transcribe(request)
+        } finally {
+            session.close()
+        }
+    }
+
+    /** Uses a pre-registered session for a queued single-file request. */
+    fun transcribe(registration: JobRegistration, request: Request): Result {
+        val session = openJob(registration)
+        return try {
+            session.transcribe(request)
+        } finally {
+            session.close()
+        }
+    }
+
+    private fun transcribe(
+        state: ParentJobState,
+        operation: OperationId,
+        request: Request,
+        batchAborted: AtomicBoolean,
+    ): Result {
         val startedAt = System.nanoTime()
         var phase = Phase.CONNECTING
         val writeTimedOut = AtomicBoolean(false)
         var connection: HttpURLConnection? = null
+        state.activeOperations.incrementAndGet()
+        fun isCancelled(): Boolean = state.cancelled.get() || batchAborted.get()
 
         return try {
+            if (isCancelled()) return Result.Cancelled
             validateRequest(request)
-            val boundary = "DictateBoundary${jobId.toString(16)}${System.nanoTime().toString(16)}"
+            val boundary = "DictateBoundary${operation.parentJobId.toString(16)}${operation.requestId.toString(16)}${System.nanoTime().toString(16)}"
             val body = MultipartBody(boundary, request)
             val openedConnection = (URL(request.endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -104,8 +280,8 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 setFixedLengthStreamingMode(body.contentLength)
             }
             connection = openedConnection
-            activeConnections[jobId] = openedConnection
-            if (jobId in cancelledJobs) {
+            state.activeConnections[operation.requestId] = openedConnection
+            if (isCancelled()) {
                 openedConnection.disconnect()
                 return Result.Cancelled
             }
@@ -115,7 +291,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             val timeoutFuture = watchdog.schedule(
                 {
                     writeTimedOut.set(true)
-                    activeConnections[jobId]?.disconnect()
+                    state.activeConnections[operation.requestId]?.disconnect()
                 },
                 WRITE_TIMEOUT_MS.toLong(),
                 TimeUnit.MILLISECONDS,
@@ -123,14 +299,14 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             try {
                 openedConnection.outputStream.buffered(FILE_BUFFER_SIZE).use { output ->
                     body.writeTo(output) {
-                        if (jobId in cancelledJobs) throw JobCancelledException()
+                        if (isCancelled()) throw JobCancelledException()
                     }
                 }
             } finally {
                 timeoutFuture.cancel(false)
             }
 
-            if (jobId in cancelledJobs) return Result.Cancelled
+            if (isCancelled()) return Result.Cancelled
             if (writeTimedOut.get()) {
                 return failure(
                     FailureKind.WRITE_TIMEOUT,
@@ -145,6 +321,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
             val status = openedConnection.responseCode
             val responseBody = readResponseBody(openedConnection, status)
             val elapsed = elapsedMillis(startedAt)
+            if (isCancelled()) return Result.Cancelled
 
             if (status !in 200..299) {
                 val summary = diagnostics.sanitize(
@@ -155,7 +332,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 val retryable = isRetryableHttpStatus(status)
                 diagnostics.error(
                     "http",
-                    "job=$jobId status=$status elapsed=${elapsed}ms retryable=$retryable response=$summary",
+                    "job=${operation.parentJobId} request=${operation.requestId} status=$status elapsed=${elapsed}ms retryable=$retryable response=$summary",
                 )
                 Result.Failure(
                     kind = FailureKind.HTTP,
@@ -167,13 +344,13 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 )
             } else {
                 val text = parseText(responseBody)
-                diagnostics.info("http", "job=$jobId status=$status elapsed=${elapsed}ms")
+                diagnostics.info("http", "job=${operation.parentJobId} request=${operation.requestId} status=$status elapsed=${elapsed}ms")
                 Result.Success(text, status, elapsed)
             }
         } catch (_: JobCancelledException) {
             Result.Cancelled
         } catch (error: InvalidResponseException) {
-            failure(
+            if (isCancelled()) Result.Cancelled else failure(
                 FailureKind.INVALID_RESPONSE,
                 error.message ?: AppStrings.get(R.string.val_response_text_invalid, "The response has no valid text field"),
                 false,
@@ -181,7 +358,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 request.apiKey,
             )
         } catch (error: IllegalArgumentException) {
-            failure(
+            if (isCancelled()) Result.Cancelled else failure(
                 FailureKind.CONFIGURATION,
                 error.message ?: AppStrings.get(R.string.val_request_config_invalid, "Invalid request configuration"),
                 false,
@@ -189,22 +366,26 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 request.apiKey,
             )
         } catch (error: SocketTimeoutException) {
-            val kind = when (phase) {
-                Phase.CONNECTING -> FailureKind.CONNECT_TIMEOUT
-                Phase.WRITING -> FailureKind.WRITE_TIMEOUT
-                Phase.READING -> FailureKind.READ_TIMEOUT
+            if (isCancelled()) {
+                Result.Cancelled
+            } else {
+                val kind = when (phase) {
+                    Phase.CONNECTING -> FailureKind.CONNECT_TIMEOUT
+                    Phase.WRITING -> FailureKind.WRITE_TIMEOUT
+                    Phase.READING -> FailureKind.READ_TIMEOUT
+                }
+                failure(kind, timeoutMessage(kind), true, startedAt, request.apiKey)
             }
-            failure(kind, timeoutMessage(kind), true, startedAt, request.apiKey)
         } catch (error: UnknownHostException) {
-            failure(FailureKind.DNS, AppStrings.get(R.string.val_transcription_dns, "Cannot resolve the transcription service hostname"), true, startedAt, request.apiKey)
+            if (isCancelled()) Result.Cancelled else failure(FailureKind.DNS, AppStrings.get(R.string.val_transcription_dns, "Cannot resolve the transcription service hostname"), true, startedAt, request.apiKey)
         } catch (error: SSLException) {
-            failure(FailureKind.TLS, AppStrings.get(R.string.val_tls_error, "TLS connection failed: %1\$s", safeMessage(error)), true, startedAt, request.apiKey)
+            if (isCancelled()) Result.Cancelled else failure(FailureKind.TLS, AppStrings.get(R.string.val_tls_error, "TLS connection failed: %1\$s", safeMessage(error)), true, startedAt, request.apiKey)
         } catch (error: ConnectException) {
-            failure(FailureKind.CONNECTION, AppStrings.get(R.string.val_transcription_connection, "Cannot connect to the transcription service"), true, startedAt, request.apiKey)
+            if (isCancelled()) Result.Cancelled else failure(FailureKind.CONNECTION, AppStrings.get(R.string.val_transcription_connection, "Cannot connect to the transcription service"), true, startedAt, request.apiKey)
         } catch (error: NoRouteToHostException) {
-            failure(FailureKind.CONNECTION, AppStrings.get(R.string.val_network_unreachable, "Network unreachable"), true, startedAt, request.apiKey)
+            if (isCancelled()) Result.Cancelled else failure(FailureKind.CONNECTION, AppStrings.get(R.string.val_network_unreachable, "Network unreachable"), true, startedAt, request.apiKey)
         } catch (error: FileNotFoundException) {
-            failure(
+            if (isCancelled()) Result.Cancelled else failure(
                 FailureKind.CONFIGURATION,
                 AppStrings.get(R.string.val_audio_unreadable, "The audio file became unreadable during the request"),
                 false,
@@ -212,7 +393,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 request.apiKey,
             )
         } catch (error: SocketException) {
-            if (jobId in cancelledJobs) {
+            if (isCancelled()) {
                 Result.Cancelled
             } else if (writeTimedOut.get()) {
                 failure(FailureKind.WRITE_TIMEOUT, AppStrings.get(R.string.val_upload_timeout, "Audio upload timed out"), true, startedAt, request.apiKey)
@@ -226,7 +407,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 )
             }
         } catch (error: IOException) {
-            if (jobId in cancelledJobs) {
+            if (isCancelled()) {
                 Result.Cancelled
             } else {
                 failure(
@@ -238,7 +419,7 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 )
             }
         } catch (error: Exception) {
-            if (jobId in cancelledJobs) {
+            if (isCancelled()) {
                 Result.Cancelled
             } else {
                 failure(
@@ -250,15 +431,58 @@ class TranscriptionClient(private val diagnostics: Diagnostics) {
                 )
             }
         } finally {
-            activeConnections.remove(jobId)
+            connection?.let { state.activeConnections.remove(operation.requestId, it) }
             connection?.disconnect()
-            cancelledJobs.remove(jobId)
+            state.activeOperations.decrementAndGet()
+            removeJobStateIfUnused(operation.parentJobId, state)
         }
     }
 
     fun cancel(jobId: Long) {
-        cancelledJobs.add(jobId)
-        activeConnections.remove(jobId)?.disconnect()
+        parentJobs[jobId]?.let {
+            cancelParentJob(it)
+            return
+        }
+
+        // A registration serializes this race with openJob(): either it
+        // records cancellation before the parent state attaches, or it hands
+        // us that attached state to cancel immediately.
+        queuedJobs[jobId]?.requestCancellation()?.let(::cancelParentJob)
+    }
+
+    private fun cancelParentJob(state: ParentJobState) {
+        state.cancelled.set(true)
+        disconnectActiveOperations(state)
+    }
+
+    private fun unregisterJob(registration: JobRegistration) {
+        queuedJobs.remove(registration.parentJobId, registration)
+    }
+
+    private fun disconnectActiveOperations(state: ParentJobState) {
+        state.activeConnections.values.toList().forEach { connection ->
+            runCatching { connection.disconnect() }
+        }
+    }
+
+    private fun releaseJobSession(parentJobId: Long, state: ParentJobState) {
+        state.openSessions.decrementAndGet()
+        removeJobStateIfUnused(parentJobId, state)
+    }
+
+    private fun removeJobStateIfUnused(parentJobId: Long, state: ParentJobState) {
+        // Serialize removal with openJob's compute call. A plain conditional
+        // remove could otherwise evict this state just after a new session
+        // increments openSessions, losing a concurrent parent cancellation.
+        parentJobs.computeIfPresent(parentJobId) { _, current ->
+            if (current !== state) {
+                current
+            } else if (state.openSessions.get() == 0 && state.activeOperations.get() == 0) {
+                null
+            } else {
+                state
+            }
+        }
     }
 
     private fun validateRequest(request: Request) {

@@ -56,6 +56,7 @@
     <string name="runtime_recording_interrupted">録音タスクが中断されました</string>
     <string name="runtime_recording_write_failed">録音を書き込めません</string>
     <string name="runtime_raw_recording_missing">元の録音ファイルが存在しないか、空です</string>
+    <string name="runtime_no_speech_detected">音声が検出されませんでした</string>
     <string name="runtime_ffmpeg_missing">arm64-v8a FFmpeg CLI が含まれていません。完全なリリース APK を再インストールしてください</string>
     <string name="runtime_ffmpeg_transcode_failed">FFmpeg の変換に失敗しました</string>
     <string name="runtime_ffmpeg_transcode_detail">FFmpeg の変換に失敗しました：%1$s</string>

@@ -83,7 +83,7 @@ class AdvancedAudioSettingsRepositoryTest {
         assertFalse(preferences.all.keys.any { it.contains("workflow.api/key") || it.contains("远程/secret:key") })
 
         val exported = JSONObject(repository.exportJson())
-        assertEquals(7, exported.getInt("schemaVersion"))
+        assertEquals(8, exported.getInt("schemaVersion"))
         val advanced = exported.getJSONObject("advancedAudio")
         assertTrue(advanced.getBoolean("enabled"))
         assertEquals(config.workflowJson, advanced.getString("workflow"))

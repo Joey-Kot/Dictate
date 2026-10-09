@@ -1,6 +1,7 @@
 package com.joeykot.dictate.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
@@ -21,6 +22,7 @@ import com.joeykot.dictate.model.AdvancedRemoteAudioConfig
 import com.joeykot.dictate.model.RemoteAudioCredentialIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,6 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowAlertDialog
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = DictateApplication::class)
@@ -388,14 +391,36 @@ class AdvancedAudioSettingsViewTest {
             assertEquals("{\"wake_phrase\":\"Retained value\"}", view.readConfig().values["vocabulary"])
 
             val hints = requireView(view, "advanced_parameter:language_hints")
-            findViews<CheckBox>(hints).forEach { it.isChecked = false }
+            val hintsSelector = multiSelectSpinner(hints)
+            assertEquals(activity.getString(R.string.advanced_audio_selected_count, 2), hintsSelector.selectedItem.toString())
+
+            // Changes remain pending until Save.  Cancelling restores the
+            // existing JSON array and its compact summary unchanged.
+            hintsSelector.performClick()
+            val cancelledDialog = checkNotNull(ShadowAlertDialog.getLatestAlertDialog())
+            setDialogMultiChoice(cancelledDialog, 0, false)
+            cancelledDialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals("[\"zh\",\"en\"]", view.readConfig().values["language_hints"])
+            assertEquals(activity.getString(R.string.advanced_audio_selected_count, 2), hintsSelector.selectedItem.toString())
+
+            // Saving an empty selection must retain the explicit [] rather
+            // than allowing the declaration default to return on rebuild.
+            hintsSelector.performClick()
+            val savedDialog = checkNotNull(ShadowAlertDialog.getLatestAlertDialog())
+            assertNotSame(cancelledDialog, savedDialog)
+            setDialogMultiChoice(savedDialog, 0, false)
+            setDialogMultiChoice(savedDialog, 1, false)
+            savedDialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
             assertEquals("[]", view.readConfig().values["language_hints"])
+            assertEquals(activity.getString(R.string.advanced_audio_not_set), hintsSelector.selectedItem.toString())
 
             // Reapplying the form must preserve the explicit empty value,
             // rather than restoring this required field's nonempty default.
             assertTrue(view.validateAndApply())
             val rebuiltHints = requireView(view, "advanced_parameter:language_hints")
-            assertTrue(findViews<CheckBox>(rebuiltHints).none { it.isChecked })
+            assertEquals(activity.getString(R.string.advanced_audio_not_set), multiSelectSpinner(rebuiltHints).selectedItem.toString())
 
             // The persisted empty array must still fail required validation
             // instead of being silently replaced by the declaration default.
@@ -429,13 +454,13 @@ class AdvancedAudioSettingsViewTest {
             val languageRow = requireView(view, "advanced_parameter:language")
             val languageInput = findViews<Spinner>(languageRow).single()
             val hintsRow = requireView(view, "advanced_parameter:language_hints")
-            val hintInputs = findViews<CheckBox>(hintsRow)
+            val hintsSelector = multiSelectSpinner(hintsRow)
 
             modelInput.setText("qwen-audio-3.1-asr-flash")
 
             assertSame(modelInput, findViews<EditText>(requireView(view, "advanced_parameter:model")).single())
             assertSame(languageInput, findViews<Spinner>(requireView(view, "advanced_parameter:language")).single())
-            assertEquals(hintInputs, findViews<CheckBox>(requireView(view, "advanced_parameter:language_hints")))
+            assertSame(hintsSelector, multiSelectSpinner(requireView(view, "advanced_parameter:language_hints")))
 
             val enableContext = findViews<Switch>(requireView(view, "advanced_parameter:enable_context")).single()
             enableContext.isChecked = false
@@ -443,7 +468,7 @@ class AdvancedAudioSettingsViewTest {
             assertEquals(View.GONE, requireView(view, "advanced_parameter:vocabulary").visibility)
             assertSame(modelInput, findViews<EditText>(requireView(view, "advanced_parameter:model")).single())
             assertSame(languageInput, findViews<Spinner>(requireView(view, "advanced_parameter:language")).single())
-            assertEquals(hintInputs, findViews<CheckBox>(requireView(view, "advanced_parameter:language_hints")))
+            assertSame(hintsSelector, multiSelectSpinner(requireView(view, "advanced_parameter:language_hints")))
         } finally {
             shadowOf(Looper.getMainLooper()).idle()
             controller.pause().stop().destroy()
@@ -467,6 +492,15 @@ class AdvancedAudioSettingsViewTest {
     }
 
     private fun button(root: View, label: String): Button = findViews<Button>(root).single { it.text.toString() == label }
+
+    private fun multiSelectSpinner(root: View): Spinner = findViews<Spinner>(root).single {
+        it.contentDescription?.toString()?.startsWith("advanced_multi_select:") == true
+    }
+
+    private fun setDialogMultiChoice(dialog: AlertDialog, position: Int, checked: Boolean) {
+        val root = checkNotNull(dialog.window).decorView
+        findViews<CheckBox>(root)[position].isChecked = checked
+    }
 
     private fun measureAndLayout(root: View, target: View): Int {
         root.measure(

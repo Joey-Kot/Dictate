@@ -4,6 +4,9 @@
     <string name="settings_sample_rate_unsupported">采样率不受支持</string>
     <string name="settings_max_retries">最大重试次数必须在 0 到 10 之间</string>
     <string name="settings_initial_backoff">初始退避时间必须在 0.1 到 60 秒之间</string>
+    <string name="settings_segment_maximum_length">最大分片时长必须是正整数</string>
+    <string name="settings_segment_minimum_pause">最小停顿时长必须是正整数</string>
+    <string name="settings_segment_concurrency">分片上传并发数必须在 1 到 %1$d 之间</string>
     <string name="settings_long_press">长按阈值必须在 300 到 5000 ms 之间</string>
     <string name="settings_double_tap">双击间隔必须在 150 到 1000 ms 之间</string>
     <string name="settings_recording_color">录制颜色必须是 #RRGGBB</string>
@@ -91,6 +94,7 @@
     <string name="advanced_audio_generation_invalid">无法应用生成的工作流：\n%1$s</string>
     <string name="advanced_audio_secret_hint">输入 %1$s</string>
     <string name="advanced_audio_not_set">未设置</string>
+    <string name="advanced_audio_selected_count">已选 %1$d 项</string>
     <string name="advanced_audio_invalid_values">测试前请修正以下值：\n%1$s</string>
     <string name="advanced_audio_required_value_missing">%1$s 为必填项</string>
     <string name="advanced_audio_required_secret_missing">%1$s 为必填项</string>

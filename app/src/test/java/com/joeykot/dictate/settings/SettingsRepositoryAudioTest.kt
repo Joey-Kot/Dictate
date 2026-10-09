@@ -35,7 +35,7 @@ class SettingsRepositoryAudioTest {
             save(repository, audio)
             assertEquals(audio, SettingsRepository(context).get().audio)
             val exported = JSONObject(repository.exportJson())
-            assertEquals(7, exported.getInt("schemaVersion"))
+            assertEquals(8, exported.getInt("schemaVersion"))
             assertEquals(audio.bitrateBps, exported.getJSONObject("audioOutput").getInt("bitrateBps"))
             assertEquals(audio, repository.previewImport(exported.toString()).settings.audio)
         }

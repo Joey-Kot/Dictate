@@ -21,14 +21,14 @@ Dictate is an Android speech transcription and selected-text post-processing too
 | **1. Permissions**<br>Enable the accessibility service and grant microphone permission. | **2. UI language**<br>Choose English, Chinese, Japanese, German, French, or Russian, then save to apply. | **3. Audio Record Settings**<br>Choose the output sample rate, codec, container, and bitrate. |
 | [![Audio API Settings](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) | [![Rewrite API Settings](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![Prompt editor](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
 | **4. Audio API Settings**<br>Set the transcription Base URL, API Key, model, and additional JSON parameters; test with a real transcription request. | **5. Rewrite API Settings**<br>Configure the text-processing provider, Base URL, API Key, and model; manage prompt order and test the connection. | **6. Prompt editor**<br>Set each prompt's provider, icon, title, instructions, and additional JSON; inherit the main Provider or configure and test an independent API. |
-| [![Retry Settings](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![Interaction Settings](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) | [![Display Settings](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) |
-| **7. Retry Settings**<br>Enable automatic retries and set the maximum retry count and initial delay. | **8. Interaction Settings**<br>Configure clipboard copying, the long-press threshold, and the maximum double-tap interval. | **9. Display Settings**<br>Adjust the floating button's size, opacity, and state colors, and manage notification settings. |
-| [![Configuration saving and import/export](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) | [![Advanced Audio API Settings](demo/11.%20Advanced%20Audio%20API%20Settings.png)](demo/11.%20Advanced%20Audio%20API%20Settings.png) | [![Generate workflow](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png)](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png) |
-| **10. Save, import, and export**<br>Save settings, import or export JSON configuration, and view or clear diagnostics. | **11. Advanced Custom Audio API Provider**<br>Generate and validate declarative ASR provider workflows from separate user requirements and vendor materials. It provides typed, conditional, single-select, and multi-select controls, and supports single requests, streamed responses, async polling, and WebSocket realtime transcription. | **12. Generate workflow**<br>Paste vendor documentation or request examples, describe the parameters to use, and generate a custom Audio API Provider workflow. |
-| [![Workflow JSON and summary](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png)](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png) | [![Dynamic parameters and secrets](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png)](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png) | [![Remote audio configuration](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png)](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png) |
-| **13. Workflow JSON and summary**<br>Review the generated JSON and summary. | **14. Dynamic parameters and secrets**<br>Workflow-declared typed controls appear after validation; Remote audio appears only when the workflow requires it. | **15. Remote audio configuration**<br>Configure WebDAV, S3-compatible, or Aliyun OSS when audio must be delivered by public URL or cloud URI. |
-|  | [![Workflow endpoint test](demo/16.%20Successfully%20tested%20the%20workflow%20API.png)](demo/16.%20Successfully%20tested%20the%20workflow%20API.png) |  |
-|  | **16. Workflow endpoint test**<br>Test the current workflow draft with its declared values and secrets against the real endpoint. |  |
+| [![Segmented Upload Settings](demo/7.%20Segmented%20Upload%20Settings.png)](demo/7.%20Segmented%20Upload%20Settings.png) | [![Retry Settings](demo/8.%20Retry%20Settings.png)](demo/8.%20Retry%20Settings.png) | [![Interaction Settings](demo/9.%20Interaction%20Settings.png)](demo/9.%20Interaction%20Settings.png) |
+| **7. Segmented Upload Settings**<br>Enable pause-aware segmented upload and set the maximum segment length, minimum pause duration, and concurrent recognition workflows. | **8. Retry Settings**<br>Enable automatic retries and set the maximum retry count and initial delay. | **9. Interaction Settings**<br>Configure clipboard copying, the long-press threshold, and the maximum double-tap interval. |
+| [![Display Settings](demo/10.%20Display%20Settings.png)](demo/10.%20Display%20Settings.png) | [![Configuration saving and import/export](demo/11.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/11.%20Configuration%20Saving%20and%20Import%26Export.png) | [![Advanced Audio API Settings](demo/12.%20Advanced%20Audio%20API%20Settings.png)](demo/12.%20Advanced%20Audio%20API%20Settings.png) |
+| **10. Display Settings**<br>Adjust the floating button's size, opacity, and state colors, and manage notification settings. | **11. Save, import, and export**<br>Save settings, import or export JSON configuration, and view or clear diagnostics. | **12. Advanced Custom Audio API Provider**<br>Generate and validate declarative ASR provider workflows from separate user requirements and vendor materials. It provides typed, conditional, single-select, and multi-select controls, and supports single requests, streamed responses, async polling, and WebSocket realtime transcription. |
+| [![Generate workflow](demo/13.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png)](demo/13.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png) | [![Workflow JSON and summary](demo/14.%20Generated%20workflow%20JSON%20and%20summary.png)](demo/14.%20Generated%20workflow%20JSON%20and%20summary.png) | [![Dynamic parameters and secrets](demo/15.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png)](demo/15.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png) |
+| **13. Generate workflow**<br>Paste vendor documentation or request examples, describe the parameters to use, and generate a custom Audio API Provider workflow. | **14. Workflow JSON and summary**<br>Review the generated JSON and summary. | **15. Dynamic parameters and secrets**<br>Workflow-declared typed controls appear after validation; Remote audio appears only when the workflow requires it. |
+| [![Remote audio configuration](demo/16.%20Configurable%20cloud%20storage%20or%20WebDAV.png)](demo/16.%20Configurable%20cloud%20storage%20or%20WebDAV.png) | [![Workflow endpoint test](demo/17.%20Successfully%20tested%20the%20workflow%20API.png)](demo/17.%20Successfully%20tested%20the%20workflow%20API.png) |  |
+| **16. Remote audio configuration**<br>Configure WebDAV, S3-compatible, or Aliyun OSS when audio must be delivered by public URL or cloud URI. | **17. Workflow endpoint test**<br>Test the current workflow draft with its declared values and secrets against the real endpoint. |  |
 
 ## Introduction to the Audio Transcription Feature
 
@@ -36,8 +36,10 @@ Dictate is an Android speech transcription and selected-text post-processing too
 - **Text rewriting**: Configure prompts, providers, models, and parameters. After selecting text, long-press the floating button to choose and invoke a rewrite action.
 - **Custom APIs**: Configure standard OpenAI-compatible audio APIs and Rewrite APIs from different providers, together with models, prompts, and additional request parameters.
 - **Advanced Custom Audio API Provider**: Generate and validate declarative ASR Provider workflows from separate user requirements and vendor documentation. Provides typed controls, conditional visibility, single-select and multi-select controls, and supports one-shot requests, streamed responses, asynchronous polling, and real-time WebSocket transcription.
+- **Segmented upload**: Optionally split long non-realtime ASR work into independent local batches. It uses raw PCM amplitude pauses without removing silence, exports complete media files sequentially through FFmpeg, and bounds concurrent recognition workflows. It supports standard OpenAI-compatible transcription and Advanced non-realtime workflows; realtime and Rewrite are excluded.
 - **Automatic insertion**: Transcription and rewrite results are inserted at the active cursor or replace the current editable selection. A clipboard copy is retained by default; when that option is disabled, the clipboard is used only as a fallback after a confirmed write failure.
 - **Audio processing**: Choose recording and output formats; FFmpeg is bundled, with no separate installation required.
+- **Local concurrent segmented uploads**: Based on audio-amplitude silence analysis, uses pauses as preferred breakpoints while preserving the complete audio timeline, exports the audio as independent media chunks, and submits them to the ASR API with limited concurrency.
 - **Task and configuration security**: Transcoding, network requests, and retries can all be canceled. API keys, workflows, and remote-storage credentials are encrypted with Android Keystore, with support for redacted diagnostics, live endpoint testing, and validated JSON import and export.
 
 ### Introduction to the selected-text processing feature
@@ -73,6 +75,11 @@ flowchart LR
   L --> C
   C --> D["AudioRecord"]
   C --> E["Embedded FFmpeg CLI"]
+  C --> SU["Optional segmented upload<br/>PCM amplitude pause analysis and frozen plan"]
+  SU --> SE["FFmpeg CLI<br/>sequential independent media export"]
+  SE --> SB["Bounded complete recognition batch"]
+  SB --> F
+  SB --> AA
   C --> F["Legacy OpenAI-compatible<br/>HttpURLConnection"]
   F --> G["User standard API URL"]
   C --> AA["AdvancedAudioClient<br/>validate + render workflow"]
@@ -95,7 +102,7 @@ flowchart LR
   T -->|"always copy enabled<br/>or direct insertion explicitly failed"| I["Clipboard"]
   I -->|"direct insertion explicitly failed"| P["ACTION_PASTE"]
   P --> X
-  J["Settings<br/>standard + Advanced workflow"] --> K["Preferences + Keystore"]
+  J["Settings<br/>standard + Advanced + segmented upload"] --> K["Preferences + Keystore"]
 ```
 
 ## Request Sequence
@@ -115,27 +122,52 @@ sequenceDiagram
   participant E as Current editor
   participant C as Clipboard
 
-  alt Legacy voice transcription
+  alt OpenAI-compatible voice transcription
     U->>O: Tap
     O->>J: Start recording
     J->>R: Record route-selected-rate mono PCM
     U->>O: Tap
     O->>J: Stop and transcribe
     J->>R: Stop and retain raw audio
-    J->>F: Transcode with current settings
-    J->>V: POST OpenAI-compatible transcription request
-    V-->>J: Final response text
+    alt Segmented upload enabled
+      J->>J: Analyze raw PCM amplitude pauses and freeze the segment plan
+      J->>F: Export complete independent media files in sequence
+      loop Bounded complete recognition workflows
+        J->>V: POST one transcription request per segment
+        V-->>J: Segment text
+      end
+      Note over J,V: Join source-order text only after every segment succeeds
+    else Segmented upload disabled
+      J->>F: Transcode with current settings
+      J->>V: POST OpenAI-compatible transcription request
+      V-->>J: Final response text
+    end
   else Advanced non-realtime voice transcription
     U->>O: Tap, then tap again
     O->>J: Record, stop, and retain raw audio
-    J->>F: Transcode with current settings
-    opt Workflow requires a remote audio reference
-      J->>S: Publish encoded audio
-      S-->>J: Public HTTPS URL or cloud URI
+    alt Segmented upload enabled
+      J->>J: Analyze raw PCM amplitude pauses and freeze the segment plan
+      J->>F: Export complete independent media files in sequence
+      loop Bounded complete recognition workflows
+        opt Workflow requires a remote audio reference
+          J->>S: Publish one encoded segment
+          S-->>J: Public HTTPS URL or cloud URI
+        end
+        J->>V: Validated request, stream, or async workflow
+        Note over J,V: Poll/result may retry, but submit is never retried
+        V-->>J: Segment text
+      end
+      Note over J,V: Join source-order text only after every segment succeeds
+    else Segmented upload disabled
+      J->>F: Transcode with current settings
+      opt Workflow requires a remote audio reference
+        J->>S: Publish encoded audio
+        S-->>J: Public HTTPS URL or cloud URI
+      end
+      J->>V: Validated request, stream, or async workflow
+      Note over J,V: Poll/result may retry, but submit is never retried
+      V-->>J: Final response text
     end
-    J->>V: Validated request, stream, or async workflow
-    Note over J,V: Poll/result may retry, but submit is never retried
-    V-->>J: Final response text
   else Advanced realtime voice transcription
     U->>O: Tap
     O->>J: Start recording
@@ -159,6 +191,8 @@ sequenceDiagram
     J->>P: Merge prompt JSON and send post-processing request
     P-->>J: Final response text
   end
+
+  Note over J,V: Segmented batches retain every PCM frame including silence, failure or cancellation returns no partial text
 
   J->>J: Remain requesting and enter delivery phase
   J->>D: Deliver text with job and cancellation guard
@@ -212,9 +246,10 @@ stateDiagram-v2
   Recording --> Paused
   Paused --> Recording
   Recording --> Transcoding: stop
-  Transcoding --> Requesting
+  Transcoding --> Requesting: single media or segmented export
   Requesting --> RetryWaiting: legacy, post-processing, or realtime replay retry
-  RetryWaiting --> Requesting
+  RetryWaiting --> Requesting: single media, post-processing, or realtime replay retry
+  RetryWaiting --> Transcoding: segmented upload retry
   Requesting --> Idle: request or delivery ends
   Transcoding --> Idle
   Recording --> Idle: cancel/discard
@@ -225,8 +260,15 @@ stateDiagram-v2
   note right of Requesting
     Includes legacy and Advanced HTTP stages,
     remote upload and cleanup, stream/poll/result,
+    bounded complete segment workflows and source-order
+    join only after every segment succeeds,
     realtime finalization or PCM replay, insertion
     verification, safety copy, and paste fallback
+  end note
+  note right of Transcoding
+    Segmented mode analyzes original PCM,
+    freezes one plan, and sequentially exports
+    complete independent media files with FFmpeg
   end note
   note right of Paused
     Advanced realtime finishes its current session
@@ -297,7 +339,7 @@ GitHub Actions is the default release path. Pushes to `main` and `dev`, plus man
 
 The Language section appears above Audio Record Settings. It defaults to English, regardless of the system language, and offers English, 中文, 日本語, Deutsch, Français, and Русский in that order. Choose a language and tap Save settings to apply it to the interface, dialogs, status messages, and recording notifications. This setting does not change the transcription language or user-supplied prompts and API parameters.
 
-The settings sections have no numbers: Audio Record Settings, Audio API Settings, Rewrite API Settings, Advanced Audio API Settings, Retry Settings, Interaction Settings, and Display Settings. Titles are translated into the selected interface language. About at the bottom lists the author, email, license, repository, and the installed build's version.
+The settings sections have no numbers: Audio Record Settings, Audio API Settings, Rewrite API Settings, Advanced Audio API Settings, Segmented Upload Settings, Retry Settings, Interaction Settings, and Display Settings. Titles are translated into the selected interface language. About at the bottom lists the author, email, license, repository, and the installed build's version.
 
 The notification switch reflects the system's actual app and recording-channel settings. Tap it to open system notification settings; its state refreshes when you return. Disabling notifications does not stop recording. On Android 13 and newer, the system may still show the running foreground service in its task manager even when notification-drawer notifications are disabled. This system setting is not part of exported app configuration.
 
@@ -306,6 +348,14 @@ The notification switch reflects the system's actual app and recording-channel s
 Enable this opt-in mode when the usual OpenAI-compatible transcription route does not cover a provider's protocol. Paste a compatible declarative workflow, or describe the requirement and provide vendor documentation or request examples to generate one. Validate and apply the workflow before filling its dynamically generated values and secrets.
 
 Remote audio settings appear only when the validated workflow delivers audio by public HTTPS URL or cloud URI. Choose WebDAV, S3-compatible storage, or Aliyun OSS when required. **Test workflow** uses the current, unsaved draft together with its declared values and secrets against the real endpoint.
+
+### Segmented Upload Settings
+
+This option is off by default. Its defaults are a maximum segment length of 495 seconds, a minimum pause duration of 700 ms, and one concurrent recognition workflow. It applies to normal OpenAI-compatible transcription and Advanced non-realtime `request`, `request_stream`, and `async_poll` workflows, retaining every supported non-realtime delivery form: `multipart_file`, `raw_audio`, `base64`, `data_uri`, `public_https_url`, `cloud_uri`, and `provider_upload`. It does not apply to Advanced realtime sessions or Rewrite.
+
+The planner analyzes original PCM amplitude, selects pauses near the configured upper limit, and preserves every PCM frame, including silence. When no suitable pause exists before the limit, it cuts at the limit. FFmpeg sequentially exports each contiguous interval as a complete independent media file; the concurrency setting limits complete recognition workflows, not local encoding.
+
+Text is directly concatenated in source order only after every segment succeeds. A failure or cancellation cancels outstanding work and delivers no partial transcript. The first segmented attempt freezes its plan and segmentation parameters; automatic retries and retranscription of the latest recording re-export the original PCM with that plan instead of analyzing pauses again.
 
 ### Audio encoding settings
 
@@ -374,7 +424,7 @@ For example, this per-prompt configuration selects `another-model` and removes `
 
 The Model from the selected shared or independent API configuration is a default; validation uses the model after merging. Google's final model is used in its request URL. Additional fields must follow the selected provider's API format; deleting a required field can produce a configuration or server error.
 
-Exports use `schemaVersion: 7`, with exact `audioOutput.bitrateBps`, the interface `language` tag, post-processing settings, ordered prompts with optional independent API settings, custom icons, and non-secret `advancedAudio` settings. A prompt's `provider` is `null` for inheritance; independent configurations store `provider`, `baseUrl`, and `model`. Imports accept versions 1–7; version 7 requires `advancedAudio`, while versions 1–4 have their `bitrateKbps` converted to bits per second. Existing PCM/WAV settings, including unsigned 8-bit output, are retained. Legacy Opus selections of 32/44.1 kHz migrate to 48 kHz, matching their previous encoded output. Versions 1–3 default to an empty prompt list; prompts without a `provider` inherit the main API, and configurations without a `language` field default to English. Invalid encoding combinations are rejected before applying an import.
+Exports use `schemaVersion: 8`, with exact `audioOutput.bitrateBps`, the interface `language` tag, post-processing settings, ordered prompts with optional independent API settings, custom icons, and non-secret `advancedAudio` and `segmentedUpload` settings. A prompt's `provider` is `null` for inheritance; independent configurations store `provider`, `baseUrl`, and `model`. Imports accept versions 1–8. Versions 7 and 8 require `advancedAudio`; version 8 also requires `segmentedUpload`. Versions 1–7 initialize segmented upload as disabled with 495 seconds, 700 ms, and concurrency 1. Versions 1–4 have their `bitrateKbps` converted to bits per second. Existing PCM/WAV settings, including unsigned 8-bit output, are retained. Legacy Opus selections of 32/44.1 kHz migrate to 48 kHz, matching their previous encoded output. Versions 1–3 default to an empty prompt list; prompts without a `provider` inherit the main API, and configurations without a `language` field default to English. Invalid encoding combinations are rejected before applying an import.
 
 The clipboard safety copy is enabled by default. Turning it off restores fallback-only behavior: Dictate copies only when current-focus insertion explicitly fails. An unconfirmed insertion is never retried or copied automatically in that mode, because it may still have reached the editor.
 

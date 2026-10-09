@@ -26,6 +26,7 @@ import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.model.ProviderConfig
 import com.joeykot.dictate.model.RetryConfig
 import com.joeykot.dictate.model.RuntimeSettings
+import com.joeykot.dictate.model.SegmentedUploadConfig
 import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
 import org.json.JSONException
@@ -89,6 +90,22 @@ class SettingsRepository(context: Context) {
                         java.lang.Double.doubleToRawLongBits(0.5),
                     ),
                 ),
+            ),
+            segmentedUpload = SegmentedUploadConfig(
+                enabled = preferences.getBoolean(KEY_SEGMENTED_UPLOAD_ENABLED, false),
+                maximumSegmentLengthSeconds = preferences.getInt(
+                    KEY_SEGMENTED_UPLOAD_MAXIMUM_SEGMENT_LENGTH_SECONDS,
+                    SegmentedUploadConfig.DEFAULT_MAXIMUM_SEGMENT_LENGTH_SECONDS,
+                ).takeIf { it > 0 } ?: SegmentedUploadConfig.DEFAULT_MAXIMUM_SEGMENT_LENGTH_SECONDS,
+                minimumPauseDurationMillis = preferences.getInt(
+                    KEY_SEGMENTED_UPLOAD_MINIMUM_PAUSE_DURATION_MILLIS,
+                    SegmentedUploadConfig.DEFAULT_MINIMUM_PAUSE_DURATION_MILLIS,
+                ).takeIf { it > 0 } ?: SegmentedUploadConfig.DEFAULT_MINIMUM_PAUSE_DURATION_MILLIS,
+                concurrency = preferences.getInt(
+                    KEY_SEGMENTED_UPLOAD_CONCURRENCY,
+                    SegmentedUploadConfig.DEFAULT_CONCURRENCY,
+                ).takeIf { it in 1..SegmentedUploadConfig.MAX_CONCURRENCY }
+                    ?: SegmentedUploadConfig.DEFAULT_CONCURRENCY,
             ),
             interaction = InteractionConfig(
                 longPressMs = preferences.getLong(KEY_LONG_PRESS, 1_500L),
@@ -200,6 +217,16 @@ class SettingsRepository(context: Context) {
                 KEY_INITIAL_BACKOFF,
                 java.lang.Double.doubleToRawLongBits(normalized.retry.initialBackoffSeconds),
             )
+            .putBoolean(KEY_SEGMENTED_UPLOAD_ENABLED, normalized.segmentedUpload.enabled)
+            .putInt(
+                KEY_SEGMENTED_UPLOAD_MAXIMUM_SEGMENT_LENGTH_SECONDS,
+                normalized.segmentedUpload.maximumSegmentLengthSeconds,
+            )
+            .putInt(
+                KEY_SEGMENTED_UPLOAD_MINIMUM_PAUSE_DURATION_MILLIS,
+                normalized.segmentedUpload.minimumPauseDurationMillis,
+            )
+            .putInt(KEY_SEGMENTED_UPLOAD_CONCURRENCY, normalized.segmentedUpload.concurrency)
             .putLong(KEY_LONG_PRESS, normalized.interaction.longPressMs)
             .putLong(KEY_DOUBLE_TAP, normalized.interaction.doubleTapMs)
             .putBoolean(KEY_ALWAYS_COPY_TO_CLIPBOARD, normalized.interaction.alwaysCopyToClipboard)
@@ -282,6 +309,7 @@ class SettingsRepository(context: Context) {
     ): List<String> = buildList {
         addAll(settings.audio.validate())
         addAll(settings.retry.validate())
+        addAll(settings.segmentedUpload.validate())
         addAll(settings.interaction.validate())
         addAll(settings.display.validate())
         if (settings.provider.baseUrl.isNotBlank()) {
@@ -352,7 +380,7 @@ class SettingsRepository(context: Context) {
     fun exportJson(): String {
         val settings = get()
         val root = JSONObject()
-        root.put("schemaVersion", 7)
+        root.put("schemaVersion", 8)
         root.put("language", settings.language.tag)
         root.put(
             "audioOutput",
@@ -384,6 +412,14 @@ class SettingsRepository(context: Context) {
                 .put("enabled", settings.retry.enabled)
                 .put("maxRetries", settings.retry.maxRetries)
                 .put("initialBackoffSeconds", settings.retry.initialBackoffSeconds),
+        )
+        root.put(
+            "segmentedUpload",
+            JSONObject()
+                .put("enabled", settings.segmentedUpload.enabled)
+                .put("maximumSegmentLengthSeconds", settings.segmentedUpload.maximumSegmentLengthSeconds)
+                .put("minimumPauseDurationMillis", settings.segmentedUpload.minimumPauseDurationMillis)
+                .put("concurrency", settings.segmentedUpload.concurrency),
         )
         root.put("postProcessing", PostProcessingSettingsCodec.encode(settings.postProcessing))
         root.put("promptIconAssets", PromptIconAssets.encode(
@@ -428,6 +464,11 @@ class SettingsRepository(context: Context) {
         val audioObject = requiredObject(root, "audioOutput", "audioOutput")
         val providerObject = requiredObject(root, "openAICompatible", "openAICompatible")
         val retryObject = requiredObject(root, "retry", "retry")
+        val segmentedUploadObject = if (schemaVersion >= 8) {
+            requiredObject(root, "segmentedUpload", "segmentedUpload")
+        } else {
+            null
+        }
         val interactionObject = requiredObject(root, "interaction", "interaction")
         val display = if (schemaVersion >= 2) {
             parseDisplay(requiredObject(root, "display", "display"))
@@ -542,6 +583,26 @@ class SettingsRepository(context: Context) {
                     "retry.initialBackoffSeconds",
                 ),
             ),
+            segmentedUpload = segmentedUploadObject?.let { segmentedUpload ->
+                SegmentedUploadConfig(
+                    enabled = requiredBoolean(segmentedUpload, "enabled", "segmentedUpload.enabled"),
+                    maximumSegmentLengthSeconds = requiredInt(
+                        segmentedUpload,
+                        "maximumSegmentLengthSeconds",
+                        "segmentedUpload.maximumSegmentLengthSeconds",
+                    ),
+                    minimumPauseDurationMillis = requiredInt(
+                        segmentedUpload,
+                        "minimumPauseDurationMillis",
+                        "segmentedUpload.minimumPauseDurationMillis",
+                    ),
+                    concurrency = requiredInt(
+                        segmentedUpload,
+                        "concurrency",
+                        "segmentedUpload.concurrency",
+                    ),
+                )
+            } ?: SegmentedUploadConfig(),
             interaction = InteractionConfig(
                 longPressMs = requiredLong(interactionObject, "longPressMs", "interaction.longPressMs"),
                 doubleTapMs = requiredLong(interactionObject, "doubleTapMs", "interaction.doubleTapMs"),
@@ -775,6 +836,10 @@ class SettingsRepository(context: Context) {
         const val KEY_RETRY_ENABLED = "retry.enabled"
         const val KEY_MAX_RETRIES = "retry.max_retries"
         const val KEY_INITIAL_BACKOFF = "retry.initial_backoff"
+        const val KEY_SEGMENTED_UPLOAD_ENABLED = "segmented_upload.enabled"
+        const val KEY_SEGMENTED_UPLOAD_MAXIMUM_SEGMENT_LENGTH_SECONDS = "segmented_upload.maximum_segment_length_seconds"
+        const val KEY_SEGMENTED_UPLOAD_MINIMUM_PAUSE_DURATION_MILLIS = "segmented_upload.minimum_pause_duration_millis"
+        const val KEY_SEGMENTED_UPLOAD_CONCURRENCY = "segmented_upload.concurrency"
         const val KEY_LONG_PRESS = "interaction.long_press"
         const val KEY_DOUBLE_TAP = "interaction.double_tap"
         const val KEY_ALWAYS_COPY_TO_CLIPBOARD = "interaction.always_copy_to_clipboard"
@@ -787,7 +852,7 @@ class SettingsRepository(context: Context) {
         const val KEY_OVERLAY_X = "overlay.x"
         const val KEY_OVERLAY_Y = "overlay.y"
         const val LEGACY_DEFAULT_SAMPLE_RATE = 16_000
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4, 5, 6, 7)
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, 4, 5, 6, 7, 8)
         val RGB_HEX = Regex("#[0-9A-Fa-f]{6}")
     }
 }

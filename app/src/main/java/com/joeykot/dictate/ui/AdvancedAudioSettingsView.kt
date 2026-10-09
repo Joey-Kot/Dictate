@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.text.Editable
 import android.text.InputType
+import android.text.TextUtils
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
@@ -523,35 +524,100 @@ class AdvancedAudioSettingsView(
         }
     }
 
-    private fun multiSelectParameterInput(definition: ParameterDefinition): LinearLayout {
-        val selected = parseMultiSelect(storedOrDefault(definition))
-        return LinearLayout(activity).apply {
-            orientation = VERTICAL
-            definition.options.forEach { option ->
-                addView(CheckBox(activity).apply {
-                    text = option.label
-                    isChecked = option.value in selected
-                    setOnCheckedChangeListener { _, _ ->
-                        if (loading) return@setOnCheckedChangeListener
-                        val checked = (0 until childCount)
-                            .mapNotNull { getChildAt(it) as? CheckBox }
-                            .filter { it.isChecked }
-                            .mapNotNull { it.tag as? String }
-                        // An explicit empty selection is distinct from an
-                        // absent value: removing it would make a nonempty
-                        // workflow default appear again on the next render.
-                        // Persist `[]` and let required-value validation
-                        // report an empty selection where applicable.
-                        valueState[definition.id] = JsonValueCodec.stringify(
-                            JsonValue.Array(checked.map { JsonValue.Text(it) }),
-                        )
-                        markDraftChanged()
-                        updateVisibilityFrom(definition.id)
-                    }
-                    tag = option.value
-                }, matchWrap())
+    /**
+     * A multi-select parameter stays compact in the form and opens an
+     * explicitly confirmed selection dialog.  Keeping the pending state in
+     * the dialog prevents an accidental tap or Cancel from changing the
+     * persisted parameter value.
+     */
+    private fun multiSelectParameterInput(definition: ParameterDefinition): Spinner {
+        fun selectedValues(): Set<String> = parseMultiSelect(storedOrDefault(definition))
+        fun selectionSummary(selected: Set<String>): String {
+            val labels = definition.options.filter { it.value in selected }.map { it.label }
+            return when (labels.size) {
+                0 -> activity.getString(R.string.advanced_audio_not_set)
+                1 -> labels.single()
+                else -> activity.getString(R.string.advanced_audio_selected_count, labels.size)
             }
         }
+
+        lateinit var control: Spinner
+        val summaryAdapter = object : ArrayAdapter<String>(
+            activity,
+            android.R.layout.simple_spinner_item,
+            mutableListOf(),
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                super.getView(position, convertView, parent).also { item ->
+                    (item as? TextView)?.apply {
+                        isSingleLine = true
+                        ellipsize = TextUtils.TruncateAt.END
+                    }
+                }
+        }
+
+        fun refreshSummary() {
+            val summary = selectionSummary(selectedValues())
+            summaryAdapter.clear()
+            summaryAdapter.add(summary)
+            summaryAdapter.notifyDataSetChanged()
+            control.setSelection(0, false)
+            control.contentDescription = "advanced_multi_select:${definition.id}:$summary"
+        }
+
+        fun openSelectionDialog() {
+            val selected = selectedValues()
+            val checkBoxes = definition.options.map { option ->
+                CheckBox(activity).apply {
+                    text = option.label
+                    isChecked = option.value in selected
+                    tag = option.value
+                }
+            }
+            val list = LinearLayout(activity).apply {
+                orientation = VERTICAL
+                checkBoxes.forEach { addView(it, matchWrap()) }
+            }
+            val scrollableList = ScrollView(activity).apply {
+                isFillViewport = false
+                isVerticalScrollBarEnabled = true
+                addView(list, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(320))
+            }
+            AlertDialog.Builder(activity)
+                .setTitle(definition.label)
+                .setView(scrollableList)
+                .setNegativeButton(activity.getString(R.string.advanced_audio_cancel), null)
+                .setPositiveButton(activity.getString(R.string.advanced_audio_save)) { _, _ ->
+                    // An explicit empty selection is distinct from an absent
+                    // value: removing it would make a nonempty workflow
+                    // default appear again on the next render. Persist `[]`
+                    // and let required-value validation report it.
+                    val values = checkBoxes
+                        .filter { it.isChecked }
+                        .mapNotNull { (it.tag as? String)?.let { value -> JsonValue.Text(value) } }
+                    valueState[definition.id] = JsonValueCodec.stringify(JsonValue.Array(values))
+                    refreshSummary()
+                    markDraftChanged()
+                    updateVisibilityFrom(definition.id)
+                }
+                .show()
+        }
+
+        control = object : Spinner(activity) {
+            override fun performClick(): Boolean {
+                if (!isEnabled || loading) return false
+                openSelectionDialog()
+                return true
+            }
+        }
+        control.apply {
+            adapter = summaryAdapter
+            prompt = definition.label
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        }
+        refreshSummary()
+        return control
     }
 
     private fun renderSecretInputs(workflow: AdvancedAudioWorkflow?) {

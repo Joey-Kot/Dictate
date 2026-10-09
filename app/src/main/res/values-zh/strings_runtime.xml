@@ -56,6 +56,7 @@
     <string name="runtime_recording_interrupted">录音任务被中断</string>
     <string name="runtime_recording_write_failed">录音写入失败</string>
     <string name="runtime_raw_recording_missing">原始录音文件不存在或为空</string>
+    <string name="runtime_no_speech_detected">未检测到语音</string>
     <string name="runtime_ffmpeg_missing">应用未包含 arm64-v8a FFmpeg CLI，请重新安装完整 release APK</string>
     <string name="runtime_ffmpeg_transcode_failed">FFmpeg 转码失败</string>
     <string name="runtime_ffmpeg_transcode_detail">FFmpeg 转码失败：%1$s</string>

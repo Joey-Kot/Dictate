@@ -53,6 +53,7 @@ import com.joeykot.dictate.model.OverlayPalette
 import com.joeykot.dictate.model.ProviderConfig
 import com.joeykot.dictate.model.RetryConfig
 import com.joeykot.dictate.model.RuntimeSettings
+import com.joeykot.dictate.model.SegmentedUploadConfig
 import com.joeykot.dictate.settings.SettingsRepository
 import com.joeykot.dictate.util.AccessibilityStatus
 import java.io.IOException
@@ -101,6 +102,10 @@ class MainActivity : Activity() {
     private lateinit var retryEnabled: Switch
     private lateinit var maxRetriesInput: EditText
     private lateinit var initialBackoffInput: EditText
+    private lateinit var segmentedUploadEnabled: Switch
+    private lateinit var maximumSegmentLengthInput: EditText
+    private lateinit var minimumPauseDurationInput: EditText
+    private lateinit var segmentUploadConcurrencyInput: EditText
     private lateinit var alwaysCopyToClipboard: Switch
     private lateinit var longPressInput: EditText
     private lateinit var doubleTapInput: EditText
@@ -297,6 +302,8 @@ class MainActivity : Activity() {
             },
         )
         root.addView(advancedAudioSection)
+        root.addView(sectionTitle(getString(R.string.main_segmented_upload_section)))
+        root.addView(buildSegmentedUploadSection())
         root.addView(sectionTitle(getString(R.string.main_retry_section)))
         root.addView(buildRetrySection())
         root.addView(sectionTitle(getString(R.string.main_interaction_section)))
@@ -367,7 +374,7 @@ class MainActivity : Activity() {
             R.string.main_about_author to "Joey Kot",
             R.string.main_about_email to "joey.kot.x@gmail.com",
             R.string.main_about_license to "GPL-3.0-or-later",
-            R.string.main_about_repo to "github.com/Joey-Kot/Dictate",
+            R.string.main_about_repo to "github.com/Joey-Kot/Dictate-for-Android",
             R.string.main_about_version to version,
         )
         entries.forEach { (label, value) ->
@@ -528,6 +535,30 @@ class MainActivity : Activity() {
         addView(labeledRow(getString(R.string.main_initial_backoff), initialBackoffInput))
     }
 
+    private fun buildSegmentedUploadSection(): View = verticalGroup().apply {
+        segmentedUploadEnabled = Switch(this@MainActivity).apply {
+            text = getString(R.string.main_enable_segmented_upload)
+            setOnCheckedChangeListener { _, _ -> updateSegmentedUploadUi() }
+        }
+        addView(segmentedUploadEnabled)
+        maximumSegmentLengthInput = numericEditText()
+        addView(labeledRow(getString(R.string.main_maximum_segment_length), maximumSegmentLengthInput))
+        minimumPauseDurationInput = numericEditText()
+        addView(labeledRow(getString(R.string.main_minimum_pause_duration), minimumPauseDurationInput))
+        segmentUploadConcurrencyInput = numericEditText()
+        addView(
+            labeledRow(
+                getString(R.string.main_segment_upload_concurrency, SegmentedUploadConfig.MAX_CONCURRENCY),
+                segmentUploadConcurrencyInput,
+            ),
+        )
+        addView(TextView(this@MainActivity).apply {
+            text = getString(R.string.main_segmented_upload_help)
+            setTextColor(Color.GRAY)
+            setPadding(0, dp(4), 0, 0)
+        })
+    }
+
     private fun buildInteractionSection(): View = verticalGroup().apply {
         alwaysCopyToClipboard = Switch(this@MainActivity).apply {
             text = getString(R.string.main_always_copy)
@@ -681,6 +712,10 @@ class MainActivity : Activity() {
         retryEnabled.isChecked = settings.retry.enabled
         maxRetriesInput.setText(settings.retry.maxRetries.toString())
         initialBackoffInput.setText(settings.retry.initialBackoffSeconds.toString())
+        segmentedUploadEnabled.isChecked = settings.segmentedUpload.enabled
+        maximumSegmentLengthInput.setText(settings.segmentedUpload.maximumSegmentLengthSeconds.toString())
+        minimumPauseDurationInput.setText(settings.segmentedUpload.minimumPauseDurationMillis.toString())
+        segmentUploadConcurrencyInput.setText(settings.segmentedUpload.concurrency.toString())
         alwaysCopyToClipboard.isChecked = settings.interaction.alwaysCopyToClipboard
         longPressInput.setText(settings.interaction.longPressMs.toString())
         doubleTapInput.setText(settings.interaction.doubleTapMs.toString())
@@ -692,6 +727,7 @@ class MainActivity : Activity() {
         )
         loadingForm = false
         updateColorSchemeUi()
+        updateSegmentedUploadUi()
     }
 
     private fun readRuntimeSettings(): RuntimeSettings {
@@ -723,6 +759,17 @@ class MainActivity : Activity() {
                     ?: throw IllegalArgumentException(getString(R.string.main_max_retries_integer)),
                 initialBackoffSeconds = initialBackoffInput.text.toString().toDoubleOrNull()
                     ?: throw IllegalArgumentException(getString(R.string.main_backoff_number)),
+            ),
+            segmentedUpload = SegmentedUploadConfig(
+                enabled = segmentedUploadEnabled.isChecked,
+                maximumSegmentLengthSeconds = maximumSegmentLengthInput.text.toString().toIntOrNull()
+                    ?: throw IllegalArgumentException(getString(R.string.settings_segment_maximum_length)),
+                minimumPauseDurationMillis = minimumPauseDurationInput.text.toString().toIntOrNull()
+                    ?: throw IllegalArgumentException(getString(R.string.settings_segment_minimum_pause)),
+                concurrency = segmentUploadConcurrencyInput.text.toString().toIntOrNull()
+                    ?: throw IllegalArgumentException(
+                        getString(R.string.settings_segment_concurrency, SegmentedUploadConfig.MAX_CONCURRENCY),
+                    ),
             ),
             interaction = InteractionConfig(
                 longPressMs = longPressInput.text.toString().toLongOrNull()
@@ -1265,6 +1312,13 @@ class MainActivity : Activity() {
         setColorSwatch(recordingPreview, palette.recordingColor)
         setColorSwatch(pausedPreview, palette.pausedColor)
         setColorSwatch(processingPreview, palette.processingColor)
+    }
+
+    private fun updateSegmentedUploadUi() {
+        val enabled = segmentedUploadEnabled.isChecked
+        maximumSegmentLengthInput.isEnabled = enabled
+        minimumPauseDurationInput.isEnabled = enabled
+        segmentUploadConcurrencyInput.isEnabled = enabled
     }
 
     private fun updateColorEditor(editor: ColorEditor, color: Int) {

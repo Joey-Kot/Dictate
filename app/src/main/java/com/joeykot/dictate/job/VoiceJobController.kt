@@ -20,9 +20,21 @@ import com.joeykot.dictate.advanced_audio.http.AdvancedCancellationSource
 import com.joeykot.dictate.advanced_audio.remote_audio.RemoteAudioConfigValidator
 import com.joeykot.dictate.audio.AudioEncodingPlan
 import com.joeykot.dictate.audio.AudioTranscoder
+import com.joeykot.dictate.audio.AudioTranscoderSegmentMediaEncoder
+import com.joeykot.dictate.audio.CancellableSegmentMediaEncoder
 import com.joeykot.dictate.audio.PcmCaptureTee
 import com.joeykot.dictate.audio.PcmPacketSink
 import com.joeykot.dictate.audio.RecordingService
+import com.joeykot.dictate.audio.SegmentMediaEncodeRequest
+import com.joeykot.dictate.audio.SegmentMediaEncodeResult
+import com.joeykot.dictate.audio.SegmentedUploadCancellation
+import com.joeykot.dictate.audio.SegmentedUploadParameters
+import com.joeykot.dictate.audio.SegmentedUploadPlanSource
+import com.joeykot.dictate.audio.SegmentedUploadPreparationRequest
+import com.joeykot.dictate.audio.SegmentedUploadPreparationResult
+import com.joeykot.dictate.audio.SegmentedUploadPreparer
+import com.joeykot.dictate.audio.SegmentedUploadSnapshot
+import com.joeykot.dictate.audio.SegmentedUploadSnapshotCodec
 import com.joeykot.dictate.advanced_audio.realtime.LivePcmTeeSource
 import com.joeykot.dictate.advanced_audio.realtime.Pcm16ReplayChunkSource
 import com.joeykot.dictate.advanced_audio.realtime.RealtimeSessionResult
@@ -38,6 +50,7 @@ import com.joeykot.dictate.model.PromptConfig
 import com.joeykot.dictate.model.ResolvedPostProcessingApi
 import com.joeykot.dictate.network.AdditionalParameters
 import com.joeykot.dictate.network.BaseUrl
+import com.joeykot.dictate.network.SegmentedUploadBatchRunner
 import com.joeykot.dictate.network.TranscriptionClient
 import com.joeykot.dictate.network.PostProcessingClient
 import com.joeykot.dictate.settings.SettingsRepository
@@ -46,11 +59,14 @@ import com.joeykot.dictate.util.AudioFileStore
 import com.joeykot.dictate.util.Diagnostics
 import java.io.File
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import java.time.Instant
 import java.util.UUID
 
@@ -81,6 +97,27 @@ class VoiceJobController(
         PROMPT_CONNECTION_TEST(postProcessing = true, connectionTest = true),
     }
 
+    /**
+     * Closes before a job stops being current.  The worker can therefore
+     * never persist a frozen segment plan after a newer recording has been
+     * promoted to the shared “last recording” location.
+     */
+    private class SegmentedSnapshotWriteGate {
+        private var closed = false
+
+        fun close() {
+            synchronized(this) {
+                closed = true
+            }
+        }
+
+        fun ifOpen(action: () -> Unit) {
+            synchronized(this) {
+                if (!closed) action()
+            }
+        }
+    }
+
     private data class ActiveJob(
         val id: Long,
         val mode: JobMode,
@@ -94,6 +131,22 @@ class VoiceJobController(
         var workerFuture: Future<*>? = null,
         var retryFuture: ScheduledFuture<*>? = null,
         var advancedCancellationSource: AdvancedCancellationSource? = null,
+        @Volatile var legacyTranscriptionRegistration: TranscriptionClient.JobRegistration? = null,
+        @Volatile var segmentedUploadSnapshot: SegmentedUploadSnapshot? = null,
+        /**
+         * A segmented attempt is allowed to drain after user cancellation so
+         * advanced remote-audio cleanup runs. These fields are thread-safe
+         * because preparation and batch workers read them off the main thread.
+         */
+        val segmentedCancellationRequested: AtomicBoolean = AtomicBoolean(false),
+        val segmentedUploadInProgress: AtomicBoolean = AtomicBoolean(false),
+        /** Planned IDs are retained for diagnostics; only active IDs are sent to FFmpeg cancel. */
+        val segmentedEncodingOperationIds: MutableSet<Long> = ConcurrentHashMap.newKeySet(),
+        val activeSegmentEncodingOperationIds: MutableSet<Long> = ConcurrentHashMap.newKeySet(),
+        /** Serializes cancellation with the planned-to-active FFmpeg hand-off. */
+        val segmentedEncodingLock: Any = Any(),
+        val segmentedCancelInFlight: AtomicReference<(() -> Unit)?> = AtomicReference(null),
+        val segmentedSnapshotWriteGate: SegmentedSnapshotWriteGate = SegmentedSnapshotWriteGate(),
         var realtimeRecording: RealtimeRecording? = null,
         val testCallback: ((ConnectionTestResult) -> Unit)? = null,
         val inputText: String = "",
@@ -141,6 +194,13 @@ class VoiceJobController(
         val startedAtNanos: Long,
     )
 
+    /** Terminal batch result before it is routed through the existing per-API handlers. */
+    private sealed interface SegmentedRequestResult {
+        data class Legacy(val result: TranscriptionClient.Result) : SegmentedRequestResult
+        data class Advanced(val result: AdvancedAudioClient.Result) : SegmentedRequestResult
+        data object Cancelled : SegmentedRequestResult
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "dictate-voice-job")
@@ -156,6 +216,8 @@ class VoiceJobController(
     private val transcoder = AudioTranscoder(application, diagnostics)
     private val client = TranscriptionClient(diagnostics)
     private val advancedAudioClient = AdvancedAudioClient()
+    private val segmentedUploadPreparer = SegmentedUploadPreparer()
+    private val segmentedUploadBatchRunner = SegmentedUploadBatchRunner()
     private val postProcessingClient = PostProcessingClient(diagnostics)
     private var postProcessingMenuListener: ((String, List<PromptConfig>) -> Unit)? = null
     private var selectionRequestId = 0L
@@ -177,6 +239,8 @@ class VoiceJobController(
     private var lastAmplitudeDispatchAt = 0L
 
     private var lastPromotedJobId = 0L
+    /** Negative IDs cannot collide with regular positive job IDs in AudioTranscoder. */
+    private val nextSegmentEncodingOperationId = AtomicLong(0L)
 
     fun addListener(listener: Listener) {
         listeners.add(listener)
@@ -666,6 +730,7 @@ class VoiceJobController(
             return
         }
         val runtime = settingsRepository.runtime()
+        val frozenSegmentedUpload = loadLastRecordingSegmentedUploadSnapshot(lastRecording)
         val jobId = nextJobId.incrementAndGet()
         activeJob = ActiveJob(
             id = jobId,
@@ -674,11 +739,37 @@ class VoiceJobController(
             rawFormat = lastRecording.format,
             runtimeSettings = runtime,
             recordingClosed = true,
+            segmentedUploadSnapshot = frozenSegmentedUpload,
         )
         updateUi(jobId, JobState.TRANSCODING) {
             AppStrings.get(R.string.runtime_retranscoding, "Transcoding again with the current settings")
         }
         beginTranscode(jobId)
+    }
+
+    /**
+     * A valid sidecar takes precedence over the current segmented-upload
+     * settings for retranscription.  It freezes the original PCM partition
+     * and concurrency contract; malformed or stale sidecars are discarded so
+     * an ordinary retranscription can still use the current configuration.
+     */
+    private fun loadLastRecordingSegmentedUploadSnapshot(
+        recording: AudioFileStore.RawRecording,
+    ): SegmentedUploadSnapshot? {
+        val encoded = fileStore.lastRecordingSegmentedUploadSnapshot(recording) ?: return null
+        val snapshot = runCatching { SegmentedUploadSnapshotCodec.decode(encoded) }.getOrNull()
+        val currentFrames = recording.file.length().takeIf {
+            it >= 0L && it % recording.format.bytesPerFrame == 0L
+        }?.div(recording.format.bytesPerFrame.toLong())
+        if (
+            snapshot == null ||
+            snapshot.plan.sourceRateHz != recording.format.sampleRateHz ||
+            snapshot.plan.totalFrames != currentFrames
+        ) {
+            fileStore.clearLastRecordingSegmentedUploadSnapshotIfUnchanged(recording, encoded)
+            return null
+        }
+        return snapshot
     }
 
     private fun beginTranscode(jobId: Long) {
@@ -715,6 +806,10 @@ class VoiceJobController(
         val plan = AudioEncodingPlan.resolve(runtime.app.audio, rawFormat)
         job.encodingPlan = plan
         diagnostics.info("ffmpeg", "job=$jobId requested=${runtime.app.audio} resolved=${plan.config} layout=${plan.layout.name}")
+        if (shouldUseSegmentedUpload(job, runtime)) {
+            startSegmentedUpload(job, runtime, rawFile, rawFormat, plan)
+            return
+        }
         val output = fileStore.newEncodedFile(jobId, plan.config.container)
         job.outputFile = output
         updateUi(jobId, JobState.TRANSCODING) {
@@ -756,6 +851,21 @@ class VoiceJobController(
             startRealtimeReplay(job, recording)
             return
         }
+        if (shouldUseSegmentedUpload(job, runtime)) {
+            val rawFile = job.rawFile ?: run {
+                finishFailure(jobId, AppStrings.get(R.string.runtime_raw_recording_missing, "The original recording file is missing or empty"))
+                return
+            }
+            val rawFormat = job.rawFormat ?: run {
+                finishFailure(jobId, AppStrings.get(R.string.runtime_raw_format_missing, "The original recording format is missing"))
+                return
+            }
+            val encodingPlan = job.encodingPlan ?: AudioEncodingPlan.resolve(runtime.app.audio, rawFormat).also {
+                job.encodingPlan = it
+            }
+            startSegmentedUpload(job, runtime, rawFile, rawFormat, encodingPlan)
+            return
+        }
         val output = job.outputFile ?: return
         if (runtime.app.advancedAudio.enabled) {
             startAdvancedAudioRequest(job, runtime, output)
@@ -784,12 +894,21 @@ class VoiceJobController(
                 AppStrings.get(R.string.runtime_retrying, "Retrying %1\$d/%2\$d", attempt, runtime.app.retry.maxRetries)
             }
         }
+        val registration = client.registerJob(jobId)
+        job.legacyTranscriptionRegistration = registration
         job.workerFuture = worker.submit {
-            if (!isCurrent(jobId)) return@submit
-            val result = client.transcribe(jobId, request)
-            mainHandler.post {
-                if (!isCurrent(jobId)) return@post
-                handleRequestResult(jobId, result)
+            try {
+                if (!isCurrent(jobId)) return@submit
+                val result = client.transcribe(registration, request)
+                mainHandler.post {
+                    if (!isCurrent(jobId)) return@post
+                    handleRequestResult(jobId, result)
+                }
+            } finally {
+                registration.close()
+                if (job.legacyTranscriptionRegistration === registration) {
+                    job.legacyTranscriptionRegistration = null
+                }
             }
         }
     }
@@ -820,6 +939,477 @@ class VoiceJobController(
             }
         }
     }
+
+    /**
+     * Realtime workflows are already diverted before this decision.  A frozen
+     * sidecar is intentionally enough to re-enable segmentation for the last
+     * recording even if the user later disables or edits the live controls.
+     */
+    private fun shouldUseSegmentedUpload(job: ActiveJob, runtime: RuntimeSettings): Boolean =
+        !job.mode.postProcessing &&
+            (job.segmentedUploadSnapshot != null || runtime.app.segmentedUpload.enabled)
+
+    /**
+     * Prepares independent media files on the controller worker, then runs
+     * each complete non-realtime workflow through the bounded batch runner.
+     * Its finally blocks own temporary-file deletion, so cancellation waits
+     * for started Advanced workflows to run their remote-object cleanup.
+     */
+    private fun startSegmentedUpload(
+        job: ActiveJob,
+        runtime: RuntimeSettings,
+        rawFile: File,
+        rawFormat: Pcm16Format,
+        encodingPlan: AudioEncodingPlan,
+    ) {
+        if (!job.segmentedUploadInProgress.compareAndSet(false, true)) return
+        synchronized(job.segmentedEncodingLock) {
+            job.segmentedCancellationRequested.set(false)
+            job.segmentedEncodingOperationIds.clear()
+            job.activeSegmentEncodingOperationIds.clear()
+        }
+        job.segmentedCancelInFlight.set(null)
+
+        val planSource = job.segmentedUploadSnapshot?.let(SegmentedUploadPlanSource::Frozen)
+            ?: SegmentedUploadPlanSource.Analyze(
+                SegmentedUploadParameters(
+                    maximumSegmentLengthSeconds = runtime.app.segmentedUpload.maximumSegmentLengthSeconds.toLong(),
+                    minimumPauseDurationMillis = runtime.app.segmentedUpload.minimumPauseDurationMillis.toLong(),
+                    concurrency = runtime.app.segmentedUpload.concurrency,
+                ),
+            )
+        val cancellation = SegmentedUploadCancellation {
+            isSegmentedUploadCancellationRequested(job)
+        }
+        val encoder = trackedSegmentMediaEncoder(job)
+
+        updateUi(job.id, JobState.TRANSCODING) {
+            AppStrings.get(
+                R.string.runtime_transcoding_to,
+                "Transcoding to %1\$s",
+                encodingPlan.config.container.value.uppercase(),
+            )
+        }
+        val registration = if (runtime.app.advancedAudio.enabled) {
+            null
+        } else {
+            client.registerJob(job.id)
+        }
+        job.legacyTranscriptionRegistration = registration
+        job.workerFuture = worker.submit {
+            try {
+                val preparation = segmentedUploadPreparer.prepare(
+                    SegmentedUploadPreparationRequest(
+                        rawInput = rawFile,
+                        inputFormat = rawFormat,
+                        encodingPlan = encodingPlan,
+                        temporaryRoot = fileStore.segmentedUploadTemporaryRoot(),
+                        planSource = planSource,
+                        operationIdForSegment = { nextSegmentEncodingOperationId.decrementAndGet() },
+                        encoder = encoder,
+                        cancellation = cancellation,
+                        onPlanFrozen = { snapshot ->
+                            persistFrozenSegmentedUploadSnapshot(job, rawFile, rawFormat, snapshot)
+                        },
+                        onOperationsPlanned = { operationIds ->
+                            synchronized(job.segmentedEncodingLock) {
+                                job.segmentedEncodingOperationIds.addAll(operationIds)
+                            }
+                        },
+                    ),
+                )
+
+                when (preparation) {
+                    is SegmentedUploadPreparationResult.Success -> {
+                        val requestResult = try {
+                            if (isSegmentedUploadCancellationRequested(job)) {
+                                SegmentedRequestResult.Cancelled
+                            } else {
+                                mainHandler.post {
+                                    if (isCurrent(job.id)) {
+                                        updateUi(job.id, JobState.REQUESTING) {
+                                            AppStrings.get(R.string.runtime_requesting_transcription, "Requesting transcription")
+                                        }
+                                    }
+                                }
+                                runSegmentedRequests(job, runtime, encodingPlan, preparation.upload, registration)
+                            }
+                        } finally {
+                            preparation.upload.cleanup()
+                            finishSegmentedUploadAttempt(job)
+                        }
+                        mainHandler.post {
+                            if (isCurrent(job.id)) handleSegmentedRequestResult(job.id, requestResult)
+                        }
+                    }
+
+                    SegmentedUploadPreparationResult.NoSpeech -> {
+                        finishSegmentedUploadAttempt(job)
+                        mainHandler.post {
+                            if (isCurrent(job.id)) handleSegmentedNoSpeech(job.id)
+                        }
+                    }
+
+                    SegmentedUploadPreparationResult.Cancelled -> {
+                        finishSegmentedUploadAttempt(job)
+                        // User cancellation already invalidates activeJob and
+                        // updates the UI. A current job cannot normally reach
+                        // this result, but do not leave it stuck if an external
+                        // cancellation raced before its state transition.
+                        mainHandler.post {
+                            if (isCurrent(job.id)) {
+                                finishFailure(
+                                    job.id,
+                                    AppStrings.get(R.string.runtime_task_cancelled, "Task cancelled"),
+                                    showToast = false,
+                                )
+                            }
+                        }
+                    }
+
+                    is SegmentedUploadPreparationResult.Failure -> {
+                        finishSegmentedUploadAttempt(job)
+                        mainHandler.post {
+                            if (isCurrent(job.id)) finishFailure(job.id, preparation.message)
+                        }
+                    }
+                }
+            } finally {
+                registration?.close()
+                if (job.legacyTranscriptionRegistration === registration) {
+                    job.legacyTranscriptionRegistration = null
+                }
+            }
+        }
+    }
+
+    /** Move each planned ID into the active set for the duration of its FFmpeg process. */
+    private fun trackedSegmentMediaEncoder(job: ActiveJob): CancellableSegmentMediaEncoder {
+        val delegate = AudioTranscoderSegmentMediaEncoder(transcoder)
+        return object : CancellableSegmentMediaEncoder {
+            override fun encode(request: SegmentMediaEncodeRequest): SegmentMediaEncodeResult {
+                synchronized(job.segmentedEncodingLock) {
+                    if (isSegmentedUploadCancellationRequested(job)) {
+                        job.segmentedEncodingOperationIds.remove(request.operationId)
+                        return SegmentMediaEncodeResult.Cancelled
+                    }
+                    job.segmentedEncodingOperationIds.remove(request.operationId)
+                    job.activeSegmentEncodingOperationIds.add(request.operationId)
+                }
+                return try {
+                    // Cancellation may win after the operation becomes active
+                    // but before the adapter begins its FFmpeg call.  Do not
+                    // create a retained AudioTranscoder cancel marker in that
+                    // case; the adapter's operation-local cancellation probe
+                    // also covers the remaining start-up race.
+                    synchronized(job.segmentedEncodingLock) {
+                        if (isSegmentedUploadCancellationRequested(job)) {
+                            job.activeSegmentEncodingOperationIds.remove(request.operationId)
+                            return SegmentMediaEncodeResult.Cancelled
+                        }
+                    }
+                    delegate.encode(request)
+                } finally {
+                    synchronized(job.segmentedEncodingLock) {
+                        job.activeSegmentEncodingOperationIds.remove(request.operationId)
+                    }
+                }
+            }
+
+            override fun cancel(operationId: Long) {
+                delegate.cancel(operationId)
+            }
+        }
+    }
+
+    private fun persistFrozenSegmentedUploadSnapshot(
+        job: ActiveJob,
+        rawFile: File,
+        rawFormat: Pcm16Format,
+        snapshot: SegmentedUploadSnapshot,
+    ) {
+        job.segmentedSnapshotWriteGate.ifOpen {
+            if (activeJob !== job || isSegmentedUploadCancellationRequested(job)) return@ifOpen
+            job.segmentedUploadSnapshot = snapshot
+            if (job.mode != JobMode.VOICE) return@ifOpen
+
+            val recording = AudioFileStore.RawRecording(rawFile, rawFormat)
+            val current = fileStore.lastRecording()
+            if (!sameRawRecording(current, recording)) return@ifOpen
+            if (!fileStore.saveLastRecordingSegmentedUploadSnapshot(recording, SegmentedUploadSnapshotCodec.encode(snapshot))) {
+                diagnostics.error("segmented-upload", "job=${job.id} failed to persist frozen segment plan")
+            }
+        }
+    }
+
+    private fun runSegmentedRequests(
+        job: ActiveJob,
+        runtime: RuntimeSettings,
+        encodingPlan: AudioEncodingPlan,
+        upload: com.joeykot.dictate.audio.PreparedSegmentedUpload,
+        registration: TranscriptionClient.JobRegistration?,
+    ): SegmentedRequestResult = if (runtime.app.advancedAudio.enabled) {
+        runSegmentedAdvancedRequests(job, runtime, encodingPlan, upload)
+    } else {
+        runSegmentedLegacyRequests(job, runtime, encodingPlan, upload, requireNotNull(registration))
+    }
+
+    private fun runSegmentedLegacyRequests(
+        job: ActiveJob,
+        runtime: RuntimeSettings,
+        encodingPlan: AudioEncodingPlan,
+        upload: com.joeykot.dictate.audio.PreparedSegmentedUpload,
+        registration: TranscriptionClient.JobRegistration,
+    ): SegmentedRequestResult {
+        val template = try {
+            TranscriptionClient.Request(
+                endpoint = BaseUrl.transcriptionEndpoint(runtime.app.provider.baseUrl),
+                apiKey = runtime.apiKey,
+                model = runtime.app.provider.model.trim(),
+                additionalFields = AdditionalParameters.parse(runtime.app.provider.additionalJson),
+                audioFile = upload.files.first(),
+                mimeType = encodingPlan.mimeType,
+                additionalJson = runtime.app.provider.additionalJson,
+            )
+        } catch (error: IllegalArgumentException) {
+            return SegmentedRequestResult.Legacy(
+                segmentedLegacyFailure(
+                    TranscriptionClient.FailureKind.CONFIGURATION,
+                    error.message ?: AppStrings.get(R.string.runtime_invalid_request, "Invalid request settings"),
+                    retryable = false,
+                ),
+            )
+        }
+
+        val startedAt = System.nanoTime()
+        val successes = ConcurrentHashMap<Int, TranscriptionClient.Result.Success>()
+        val session = client.openJob(registration)
+        val cancelInFlight: () -> Unit = { session.cancelInFlightOperations() }
+        job.segmentedCancelInFlight.set(cancelInFlight)
+        return try {
+            when (
+                val result = segmentedUploadBatchRunner.run(
+                    items = upload.files.mapIndexed { index, file -> SegmentedUploadBatchRunner.Item(index, file) },
+                    maxConcurrency = upload.snapshot.parameters.concurrency,
+                    isParentCancellationRequested = {
+                        isSegmentedUploadCancellationRequested(job) || session.isCancellationRequested()
+                    },
+                    cancelInFlight = cancelInFlight,
+                    execute = { item ->
+                        if (isSegmentedUploadCancellationRequested(job) || session.isCancellationRequested()) {
+                            SegmentedUploadBatchRunner.TaskResult.Cancelled
+                        } else {
+                            val operation = session.newOperationId()
+                            when (val response = session.transcribe(operation, template.copy(audioFile = item.value))) {
+                                is TranscriptionClient.Result.Success -> {
+                                    successes[item.index] = response
+                                    SegmentedUploadBatchRunner.TaskResult.Success(response.text)
+                                }
+
+                                is TranscriptionClient.Result.Failure ->
+                                    SegmentedUploadBatchRunner.TaskResult.Failure(response)
+
+                                TranscriptionClient.Result.Cancelled -> SegmentedUploadBatchRunner.TaskResult.Cancelled
+                            }
+                        }
+                    },
+                )
+            ) {
+                is SegmentedUploadBatchRunner.Result.Success -> {
+                    val final = successes[upload.files.lastIndex]
+                    SegmentedRequestResult.Legacy(
+                        TranscriptionClient.Result.Success(
+                            text = result.text,
+                            statusCode = final?.statusCode ?: 200,
+                            elapsedMillis = elapsedMillis(startedAt),
+                        ),
+                    )
+                }
+
+                is SegmentedUploadBatchRunner.Result.Failure -> SegmentedRequestResult.Legacy(result.error)
+                SegmentedUploadBatchRunner.Result.Cancelled -> SegmentedRequestResult.Cancelled
+                SegmentedUploadBatchRunner.Result.Empty,
+                SegmentedUploadBatchRunner.Result.InvalidConcurrency,
+                -> SegmentedRequestResult.Legacy(
+                    segmentedLegacyFailure(
+                        TranscriptionClient.FailureKind.CONFIGURATION,
+                        AppStrings.get(R.string.runtime_invalid_request, "Invalid request settings"),
+                        retryable = false,
+                    ),
+                )
+
+                is SegmentedUploadBatchRunner.Result.UnexpectedFailure -> SegmentedRequestResult.Legacy(
+                    segmentedLegacyFailure(
+                        TranscriptionClient.FailureKind.IO,
+                        AppStrings.get(
+                            R.string.val_request_error,
+                            "Request failed: %1\$s",
+                            diagnostics.sanitize(
+                                result.cause.message ?: result.cause.javaClass.simpleName,
+                                300,
+                                listOf(runtime.apiKey),
+                            ),
+                        ),
+                        retryable = false,
+                    ),
+                )
+            }
+        } finally {
+            job.segmentedCancelInFlight.compareAndSet(cancelInFlight, null)
+            session.close()
+        }
+    }
+
+    private fun runSegmentedAdvancedRequests(
+        job: ActiveJob,
+        runtime: RuntimeSettings,
+        encodingPlan: AudioEncodingPlan,
+        upload: com.joeykot.dictate.audio.PreparedSegmentedUpload,
+    ): SegmentedRequestResult {
+        val parentCancellation = AdvancedCancellationSource()
+        val batchCancellation = AdvancedCancellationSource()
+        job.advancedCancellationSource = parentCancellation
+        val startedAt = System.nanoTime()
+        val successes = ConcurrentHashMap<Int, AdvancedAudioClient.Result.Success>()
+        val cancelInFlight: () -> Unit = { batchCancellation.cancel() }
+        job.segmentedCancelInFlight.set(cancelInFlight)
+
+        return try {
+            when (
+                val result = segmentedUploadBatchRunner.run(
+                    items = upload.files.mapIndexed { index, file -> SegmentedUploadBatchRunner.Item(index, file) },
+                    maxConcurrency = upload.snapshot.parameters.concurrency,
+                    isParentCancellationRequested = {
+                        isSegmentedUploadCancellationRequested(job) || parentCancellation.token.isCancelled()
+                    },
+                    cancelInFlight = cancelInFlight,
+                    execute = { item ->
+                        if (isSegmentedUploadCancellationRequested(job) || parentCancellation.token.isCancelled()) {
+                            SegmentedUploadBatchRunner.TaskResult.Cancelled
+                        } else {
+                            val response = advancedAudioClient.transcribe(
+                                AdvancedAudioClient.Request(
+                                    config = runtime.app.advancedAudio,
+                                    secrets = runtime.advancedAudioSecrets,
+                                    audioFile = item.value,
+                                    mimeType = encodingPlan.mimeType,
+                                    retry = runtime.app.retry,
+                                    onPhase = { phase ->
+                                        diagnostics.info("advanced-audio", "job=${job.id} segment=${item.index} $phase")
+                                    },
+                                ),
+                                batchCancellation.token,
+                            )
+                            when (response) {
+                                is AdvancedAudioClient.Result.Success -> {
+                                    successes[item.index] = response
+                                    SegmentedUploadBatchRunner.TaskResult.Success(response.text)
+                                }
+
+                                is AdvancedAudioClient.Result.Failure ->
+                                    SegmentedUploadBatchRunner.TaskResult.Failure(response)
+
+                                is AdvancedAudioClient.Result.Cancelled -> SegmentedUploadBatchRunner.TaskResult.Cancelled
+                            }
+                        }
+                    },
+                )
+            ) {
+                is SegmentedUploadBatchRunner.Result.Success -> {
+                    val final = successes[upload.files.lastIndex]
+                    SegmentedRequestResult.Advanced(
+                        AdvancedAudioClient.Result.Success(
+                            text = result.text,
+                            statusCode = final?.statusCode ?: 200,
+                            elapsedMillis = elapsedMillis(startedAt),
+                        ),
+                    )
+                }
+
+                is SegmentedUploadBatchRunner.Result.Failure -> SegmentedRequestResult.Advanced(result.error)
+                SegmentedUploadBatchRunner.Result.Cancelled -> SegmentedRequestResult.Cancelled
+                SegmentedUploadBatchRunner.Result.Empty,
+                SegmentedUploadBatchRunner.Result.InvalidConcurrency,
+                -> SegmentedRequestResult.Advanced(
+                    AdvancedAudioClient.Result.Failure(
+                        message = AppStrings.get(R.string.runtime_invalid_request, "Invalid request settings"),
+                        elapsedMillis = elapsedMillis(startedAt),
+                    ),
+                )
+
+                is SegmentedUploadBatchRunner.Result.UnexpectedFailure -> SegmentedRequestResult.Advanced(
+                    AdvancedAudioClient.Result.Failure(
+                        message = AppStrings.get(
+                            R.string.val_request_error,
+                            "Request failed: %1\$s",
+                            diagnostics.sanitize(result.cause.message ?: result.cause.javaClass.simpleName, 300),
+                        ),
+                        elapsedMillis = elapsedMillis(startedAt),
+                    ),
+                )
+            }
+        } finally {
+            job.segmentedCancelInFlight.compareAndSet(cancelInFlight, null)
+        }
+    }
+
+    private fun segmentedLegacyFailure(
+        kind: TranscriptionClient.FailureKind,
+        message: String,
+        retryable: Boolean,
+    ): TranscriptionClient.Result.Failure = TranscriptionClient.Result.Failure(
+        kind = kind,
+        message = message,
+        retryable = retryable,
+        elapsedMillis = 0L,
+    )
+
+    private fun handleSegmentedRequestResult(jobId: Long, result: SegmentedRequestResult) {
+        when (result) {
+            is SegmentedRequestResult.Legacy -> handleRequestResult(jobId, result.result)
+            is SegmentedRequestResult.Advanced -> handleAdvancedRequestResult(jobId, result.result)
+            SegmentedRequestResult.Cancelled -> Unit
+        }
+    }
+
+    private fun handleSegmentedNoSpeech(jobId: Long) {
+        val job = activeJob?.takeIf { it.id == jobId } ?: return
+        val message = AppStrings.get(R.string.runtime_no_speech_detected, "No speech detected")
+        if (job.mode.connectionTest) {
+            completeJob(jobId, ConnectionTestResult(success = false, message = message))
+        } else {
+            finishFailure(jobId, message)
+        }
+    }
+
+    private fun finishSegmentedUploadAttempt(job: ActiveJob) {
+        job.segmentedCancelInFlight.getAndSet(null)
+        synchronized(job.segmentedEncodingLock) {
+            job.segmentedEncodingOperationIds.clear()
+            job.activeSegmentEncodingOperationIds.clear()
+        }
+        job.segmentedUploadInProgress.set(false)
+    }
+
+    /** Signal the batch child source and the currently running FFmpeg export without interrupting drain. */
+    private fun requestSegmentedUploadCancellation(job: ActiveJob) {
+        synchronized(job.segmentedEncodingLock) {
+            job.segmentedCancellationRequested.set(true)
+            // Only an operation that has crossed the planned-to-active
+            // hand-off can own a process.  `cancelRunning` deliberately does
+            // not retain a pre-start marker for later slices.
+            job.activeSegmentEncodingOperationIds.forEach { operationId ->
+                transcoder.cancelRunning(operationId)
+            }
+        }
+        job.segmentedCancelInFlight.get()?.let { cancel -> runCatching(cancel) }
+    }
+
+    private fun isSegmentedUploadCancellationRequested(job: ActiveJob): Boolean =
+        job.segmentedCancellationRequested.get() || !isCurrent(job.id)
+
+    private fun elapsedMillis(startedAtNanos: Long): Long =
+        (System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND
 
     private fun startRealtimeLiveSegment(
         job: ActiveJob,
@@ -1322,12 +1912,14 @@ class VoiceJobController(
         val stateAtCancellation = uiState.state
 
         // Invalidate the job before touching any cancellable component.
+        closeSegmentedSnapshotWriteGate(job)
         activeJob = null
         updateUi(null, JobState.IDLE) { AppStrings.get(R.string.runtime_task_cancelled, "Task cancelled") }
 
         job.retryFuture?.cancel(true)
         cancelRealtimeRecording(job)
         job.advancedCancellationSource?.cancel()
+        requestSegmentedUploadCancellation(job)
 
         when (stateAtCancellation) {
             JobState.RECORDING,
@@ -1340,7 +1932,9 @@ class VoiceJobController(
                 job.rawFile?.delete()
             }
             JobState.TRANSCODING -> {
-                if (job.recordingClosed && job.outputFile != null) transcoder.cancel(job.id)
+                if (!job.segmentedUploadInProgress.get() && job.recordingClosed && job.outputFile != null) {
+                    transcoder.cancel(job.id)
+                }
                 if (job.mode == JobMode.VOICE && !job.recordingClosed) {
                     pendingPreserveAfterRecorderStops.add(job.id)
                     val delivered = runCatching {
@@ -1352,7 +1946,11 @@ class VoiceJobController(
                 }
             }
             JobState.REQUESTING -> {
-                if (job.mode.postProcessing) postProcessingClient.cancel() else client.cancel(job.id)
+                when {
+                    job.mode.postProcessing -> postProcessingClient.cancel()
+                    job.runtimeSettings?.app?.advancedAudio?.enabled == true -> Unit
+                    else -> client.cancel(job.id)
+                }
                 if (job.mode == JobMode.VOICE && hasValidRawAudio(job)) {
                     promoteRecording(job.id, checkNotNull(job.rawFile), job.rawFormat)
                 }
@@ -1365,7 +1963,16 @@ class VoiceJobController(
             JobState.IDLE -> Unit
         }
 
-        job.workerFuture?.cancel(true)
+        // A segmented batch deliberately drains every started task after its
+        // child cancellation is signalled. Interrupting this outer worker
+        // would let Advanced remote-object cleanup lose that opportunity.
+        if (!job.segmentedUploadInProgress.get()) {
+            job.workerFuture?.cancel(true)
+            // The worker may have been discarded before it could open the
+            // registered HTTP session. It retains the registration if it did
+            // start, so a cancellation racing that hand-off remains visible.
+            job.legacyTranscriptionRegistration?.close()
+        }
         job.outputFile?.delete()
 
         if (job.mode.connectionTest) {
@@ -1379,6 +1986,7 @@ class VoiceJobController(
         pendingPreserveAfterRecorderStops.add(job.id)
         cancelRealtimeRecording(job)
         job.advancedCancellationSource?.cancel()
+        closeSegmentedSnapshotWriteGate(job)
         activeJob = null
         updateUi(null, JobUiState(JobState.IDLE, message))
         val delivered = runCatching {
@@ -1394,6 +2002,8 @@ class VoiceJobController(
         job.retryFuture?.cancel(true)
         cancelRealtimeRecording(job)
         job.advancedCancellationSource?.cancel()
+        closeSegmentedSnapshotWriteGate(job)
+        requestSegmentedUploadCancellation(job)
         job.outputFile?.delete()
         if (job.mode.connectionTest) job.rawFile?.delete()
         activeJob = null
@@ -1410,11 +2020,25 @@ class VoiceJobController(
         job.retryFuture?.cancel(false)
         cancelRealtimeRecording(job)
         job.advancedCancellationSource?.cancel()
+        closeSegmentedSnapshotWriteGate(job)
         job.outputFile?.delete()
         if (job.mode.connectionTest) job.rawFile?.delete()
         activeJob = null
         updateUi(null, JobState.IDLE) { AppStrings.get(R.string.runtime_idle, "Idle") }
         if (testResult != null) job.testCallback?.invoke(testResult)
+    }
+
+    /**
+     * A worker may still be unwinding while the main thread invalidates a
+     * task.  Closing this per-job gate first makes any late `onPlanFrozen`
+     * callback a no-op before another recording can become the shared last
+     * recording.
+     */
+    private fun closeSegmentedSnapshotWriteGate(job: ActiveJob) {
+        job.segmentedSnapshotWriteGate.close()
+        synchronized(job.segmentedEncodingLock) {
+            job.segmentedCancellationRequested.set(true)
+        }
     }
 
     private fun promoteRecording(
@@ -1441,6 +2065,15 @@ class VoiceJobController(
             )
             null
         }
+    }
+
+    private fun sameRawRecording(
+        first: AudioFileStore.RawRecording?,
+        second: AudioFileStore.RawRecording,
+    ): Boolean {
+        val current = first ?: return false
+        return current.format == second.format &&
+            runCatching { current.file.canonicalFile == second.file.canonicalFile }.getOrDefault(false)
     }
 
     private fun hasValidRawAudio(job: ActiveJob): Boolean {
@@ -1484,7 +2117,11 @@ class VoiceJobController(
     }
 
     private fun validateRuntimeSettings(runtime: RuntimeSettings): String? {
-        val errors = (runtime.app.audio.validate() + runtime.app.retry.validate()).toMutableList()
+        val errors = (
+            runtime.app.audio.validate() +
+                runtime.app.retry.validate() +
+                runtime.app.segmentedUpload.validate()
+            ).toMutableList()
         if (runtime.app.advancedAudio.enabled) {
             val config = runtime.app.advancedAudio
             val document = config.workflowJson?.trim().takeIf { !it.isNullOrEmpty() }

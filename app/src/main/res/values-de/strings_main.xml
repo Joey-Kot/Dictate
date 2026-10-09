@@ -8,6 +8,7 @@
     <string name="main_provider_section">Audio-API-Einstellungen</string>
     <string name="main_post_processing_section">Einstellungen der Umformulierungs-API</string>
     <string name="main_advanced_audio_section">Erweiterte Audio-API-Einstellungen</string>
+    <string name="main_segmented_upload_section">Einstellungen für segmentierte Uploads</string>
     <string name="main_retry_section">Wiederholungseinstellungen</string>
     <string name="main_interaction_section">Bedienungseinstellungen</string>
     <string name="main_display_section">Anzeigeeinstellungen</string>
@@ -38,6 +39,11 @@
     <string name="main_auto_retry">Automatisch wiederholen (standardmäßig aus)</string>
     <string name="main_max_retries">Maximale Wiederholungen</string>
     <string name="main_initial_backoff">Anfängliche Wartezeit (Sekunden)</string>
+    <string name="main_enable_segmented_upload">Segmentierten Upload aktivieren (standardmäßig aus)</string>
+    <string name="main_maximum_segment_length">Maximale Segmentlänge (s)</string>
+    <string name="main_minimum_pause_duration">Mindestpausendauer (ms)</string>
+    <string name="main_segment_upload_concurrency">Gleichzeitige Segment-Uploads (1–%1$d)</string>
+    <string name="main_segmented_upload_help">Teilt nicht in Echtzeit übertragene Audiodaten an Pausen in eigenständige Anfragen auf und führt sie parallel aus. Die ursprüngliche Aufnahme bleibt unverändert.</string>
     <string name="main_always_copy">Ergebnisse immer in die Zwischenablage kopieren (standardmäßig an)</string>
     <string name="main_long_press">Dauer für langes Drücken (ms)</string>
     <string name="main_double_tap">Maximaler Doppeltipp-Abstand (ms)</string>

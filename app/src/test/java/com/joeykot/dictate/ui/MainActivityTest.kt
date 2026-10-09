@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.SeekBar
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import com.joeykot.dictate.DictateApplication
 import com.joeykot.dictate.i18n.AppStrings
@@ -18,6 +19,7 @@ import com.joeykot.dictate.model.AudioContainer
 import com.joeykot.dictate.model.PromptConfig
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -181,6 +183,61 @@ class MainActivityTest {
             layout(root)
             shadowOf(Looper.getMainLooper()).idle()
             assertTrue(recordingColor.isShown)
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun segmentedUploadSectionSitsAboveRetryAndRetainsDisabledValues() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            val activity = controller.get()
+            val root = activity.window.decorView
+            layout(root)
+            shadowOf(Looper.getMainLooper()).idle()
+
+            val section = findTextView(root, "分片上传设置")!!
+            val retry = findTextView(root, "重试设置")!!
+            val parent = section.parent as ViewGroup
+            assertTrue(parent.indexOfChild(section) < parent.indexOfChild(retry))
+
+            val enabled = findTextView(root, "启用分片上传（默认关闭）") as Switch
+            val maximumLength = editTextForLabel(root, "最大分片时长（秒）")
+            val minimumPause = editTextForLabel(root, "最小停顿时长（毫秒）")
+            val concurrency = editTextForLabel(root, "分片上传并发数（1–50）")
+            assertFalse(enabled.isChecked)
+            assertFalse(maximumLength.isEnabled)
+            assertFalse(minimumPause.isEnabled)
+            assertFalse(concurrency.isEnabled)
+
+            enabled.performClick()
+            assertTrue(enabled.isChecked)
+            assertTrue(maximumLength.isEnabled)
+            assertTrue(minimumPause.isEnabled)
+            assertTrue(concurrency.isEnabled)
+            maximumLength.setText("420")
+            minimumPause.setText("900")
+            concurrency.setText("2")
+
+            enabled.performClick()
+            assertFalse(enabled.isChecked)
+            assertFalse(maximumLength.isEnabled)
+            assertFalse(minimumPause.isEnabled)
+            assertFalse(concurrency.isEnabled)
+            assertEquals("420", maximumLength.text.toString())
+            assertEquals("900", minimumPause.text.toString())
+            assertEquals("2", concurrency.text.toString())
+
+            (findTextView(root, "保存设置") as Button).performClick()
+            assertTrue(waitUntil {
+                application.settingsRepository.get().segmentedUpload == com.joeykot.dictate.model.SegmentedUploadConfig(
+                    enabled = false,
+                    maximumSegmentLengthSeconds = 420,
+                    minimumPauseDurationMillis = 900,
+                    concurrency = 2,
+                )
+            })
         } finally {
             controller.pause().stop().destroy()
         }

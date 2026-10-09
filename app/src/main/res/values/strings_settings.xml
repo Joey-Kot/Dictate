@@ -4,6 +4,9 @@
     <string name="settings_sample_rate_unsupported">Unsupported sample rate</string>
     <string name="settings_max_retries">Maximum retries must be between 0 and 10</string>
     <string name="settings_initial_backoff">Initial backoff must be between 0.1 and 60 seconds</string>
+    <string name="settings_segment_maximum_length">Maximum segment length must be a positive integer</string>
+    <string name="settings_segment_minimum_pause">Minimum pause duration must be a positive integer</string>
+    <string name="settings_segment_concurrency">Segment upload concurrency must be between 1 and %1$d</string>
     <string name="settings_long_press">Long-press duration must be between 300 and 5000 ms</string>
     <string name="settings_double_tap">Double-tap interval must be between 150 and 1000 ms</string>
     <string name="settings_recording_color">Recording color must use #RRGGBB</string>
@@ -91,6 +94,7 @@
     <string name="advanced_audio_generation_invalid">Generated workflow could not be applied:\n%1$s</string>
     <string name="advanced_audio_secret_hint">Enter %1$s</string>
     <string name="advanced_audio_not_set">Not set</string>
+    <string name="advanced_audio_selected_count">%1$d selected</string>
     <string name="advanced_audio_invalid_values">Fix these values before testing:\n%1$s</string>
     <string name="advanced_audio_required_value_missing">%1$s is required</string>
     <string name="advanced_audio_required_secret_missing">%1$s is required</string>

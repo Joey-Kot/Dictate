@@ -21,14 +21,14 @@ Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦
 | **1. 权限设置**<br>启用无障碍服务并授予麦克风权限。 | **2. 界面语言**<br>支持英语、中文、日语、德语、法语和俄语，选择后保存生效。 | **3. 录音设置**<br>选择输出采样率、编码、容器和比特率。 |
 | [![音频 API 设置](demo/4.%20Audio%20API%20Settings.png)](demo/4.%20Audio%20API%20Settings.png) | [![改写 API 设置](demo/5.%20Rewrite%20API%20Settings.png)](demo/5.%20Rewrite%20API%20Settings.png) | [![提示词编辑](demo/6.%20Prompt%20Edit.png)](demo/6.%20Prompt%20Edit.png) |
 | **4. 音频 API 设置**<br>配置转写服务的 Base URL、API Key、模型及附加 JSON 参数，并通过真实转写请求测试连接。 | **5. 改写 API 设置**<br>配置文本后处理的服务商、Base URL、API Key 和模型，管理提示词顺序并测试连接。 | **6. 提示词编辑**<br>设置服务商、图标、标题、内容和附加 JSON；默认继承主 Provider，也可配置并测试独立 API。 |
-| [![重试设置](demo/7.%20Retry%20Settings.png)](demo/7.%20Retry%20Settings.png) | [![交互设置](demo/8.%20Interaction%20Settings.png)](demo/8.%20Interaction%20Settings.png) | [![显示设置](demo/9.%20Display%20Settings.png)](demo/9.%20Display%20Settings.png) |
-| **7. 重试设置**<br>开启自动重试，设置最大重试次数和初始等待时间。 | **8. 交互设置**<br>设置是否始终复制结果到剪贴板，以及长按阈值和双击最大间隔。 | **9. 显示设置**<br>调整悬浮按钮大小、不透明度和各状态颜色，并管理通知设置。 |
-| [![配置保存与导入导出](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/10.%20Configuration%20Saving%20and%20Import%26Export.png) | [![高级音频 API 设置](demo/11.%20Advanced%20Audio%20API%20Settings.png)](demo/11.%20Advanced%20Audio%20API%20Settings.png) | [![生成工作流](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png)](demo/12.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png) |
-| **10. 配置保存与导入导出**<br>保存设置，通过 JSON 导入或导出配置，以及查看或清空诊断信息。 | **11. 高级自定义 Audio API Provider**<br>根据独立的用户需求和厂商资料生成并校验声明式 ASR Provider 工作流，提供类型化、条件显示、单选和多选控件，支持单请求、流式响应、异步轮询和 WebSocket 实时转写。 | **12. 生成工作流**<br>粘贴厂商文档请求示例，描述需要使用的参数，即可生成自定义 Audio API Provider 工作流。 |
-| [![工作流 JSON 与摘要](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png)](demo/13.%20Generated%20workflow%20JSON%20and%20summary.png) | [![动态参数与密钥](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png)](demo/14.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png) | [![远端音频配置](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png)](demo/15.%20Configurable%20cloud%20storage%20or%20WebDAV.png) |
-| **13. 工作流 JSON 与摘要**<br>查看生成的 JSON 与摘要。 | **14. 动态参数与密钥**<br>校验后按工作流声明生成类型化控件；只有工作流需要时才显示远端音频。 | **15. 远端音频配置**<br>音频需要通过公网 URL 或云 URI 投递时，可配置 WebDAV、S3-compatible 或阿里云 OSS。 |
-|  | [![工作流端点测试](demo/16.%20Successfully%20tested%20the%20workflow%20API.png)](demo/16.%20Successfully%20tested%20the%20workflow%20API.png) |  |
-|  | **16. 工作流端点测试**<br>使用当前工作流草稿及其声明的值和密钥测试真实端点。 |  |
+| [![分片上传设置](demo/7.%20Segmented%20Upload%20Settings.png)](demo/7.%20Segmented%20Upload%20Settings.png) | [![重试设置](demo/8.%20Retry%20Settings.png)](demo/8.%20Retry%20Settings.png) | [![交互设置](demo/9.%20Interaction%20Settings.png)](demo/9.%20Interaction%20Settings.png) |
+| **7. 分片上传设置**<br>启用基于停顿分析的分片上传，设置最大分片时长、最小停顿时长和并发识别工作流数。 | **8. 重试设置**<br>开启自动重试，设置最大重试次数和初始等待时间。 | **9. 交互设置**<br>设置是否始终复制结果到剪贴板，以及长按阈值和双击最大间隔。 |
+| [![显示设置](demo/10.%20Display%20Settings.png)](demo/10.%20Display%20Settings.png) | [![配置保存与导入导出](demo/11.%20Configuration%20Saving%20and%20Import%26Export.png)](demo/11.%20Configuration%20Saving%20and%20Import%26Export.png) | [![高级音频 API 设置](demo/12.%20Advanced%20Audio%20API%20Settings.png)](demo/12.%20Advanced%20Audio%20API%20Settings.png) |
+| **10. 显示设置**<br>调整悬浮按钮大小、不透明度和各状态颜色，并管理通知设置。 | **11. 配置保存与导入导出**<br>保存设置，通过 JSON 导入或导出配置，以及查看或清空诊断信息。 | **12. 高级自定义 Audio API Provider**<br>根据独立的用户需求和厂商资料生成并校验声明式 ASR Provider 工作流，提供类型化、条件显示、单选和多选控件，支持单请求、流式响应、异步轮询和 WebSocket 实时转写。 |
+| [![生成工作流](demo/13.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png)](demo/13.%20Generate%20a%20workflow%20based%20on%20the%20requirements%20and%20the%20vendor%27s%20API%20documentation.png) | [![工作流 JSON 与摘要](demo/14.%20Generated%20workflow%20JSON%20and%20summary.png)](demo/14.%20Generated%20workflow%20JSON%20and%20summary.png) | [![动态参数与密钥](demo/15.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png)](demo/15.%20Configurable%20parameters%20dynamically%20generated%20according%20to%20user%20requirements.png) |
+| **13. 生成工作流**<br>粘贴厂商文档请求示例，描述需要使用的参数，即可生成自定义 Audio API Provider 工作流。 | **14. 工作流 JSON 与摘要**<br>查看生成的 JSON 与摘要。 | **15. 动态参数与密钥**<br>校验后按工作流声明生成类型化控件；只有工作流需要时才显示远端音频。 |
+| [![远端音频配置](demo/16.%20Configurable%20cloud%20storage%20or%20WebDAV.png)](demo/16.%20Configurable%20cloud%20storage%20or%20WebDAV.png) | [![工作流端点测试](demo/17.%20Successfully%20tested%20the%20workflow%20API.png)](demo/17.%20Successfully%20tested%20the%20workflow%20API.png) |  |
+| **16. 远端音频配置**<br>音频需要通过公网 URL 或云 URI 投递时，可配置 WebDAV、S3-compatible 或阿里云 OSS。 | **17. 工作流端点测试**<br>使用当前工作流草稿及其声明的值和密钥测试真实端点。 |  |
 
 ## 音频转录功能介绍
 
@@ -36,8 +36,10 @@ Dictate 是 Android 语音转写与选中文本后处理工具，通过不抢焦
 - **文本改写**：配置提示词及不同服务商、模型、参数，选择文本后长按悬浮按钮可选择调用。
 - **自定义 API**：配置普通 OpenAI-compatible 风格音频 API 与不同服务商的 Rewrite 接口、模型、提示词和额外请求参数。
 - **高级自定义 Audio API Provider**：根据独立的用户需求和厂商资料生成并校验声明式 ASR Provider 工作流，提供类型化、条件显示、单选和多选控件，支持单请求、流式响应、异步轮询和 WebSocket 实时转写。
+- **分片上传**：可选地将较长的非实时 ASR 任务拆为本地独立批次。基于原始 PCM 振幅停顿划分而不删除静音，FFmpeg 顺序导出完整媒体文件，再有界并发执行识别工作流；支持普通 OpenAI-compatible 转写和高级非实时工作流，不用于实时转写或 Rewrite。
 - **自动写入**：转写与改写结果写入当前光标处或替换当前可编辑选区，默认保留结果的剪贴板副本，关闭后只有明确写入失败才使用剪贴板兜底。
 - **音频处理**：选择录制和输出格式；内嵌 FFmpeg，无需另行安装。
+- **本地并发分片上传**：基于音频振幅静音分析，以停顿作为优先断点并保留完整音频时间轴，将音频导出为独立媒体分片并受限并发提交至 ASR API。
 - **任务与配置安全**：转码、网络请求和重试均可取消；API Key、工作流及远端存储密钥通过 Android Keystore 加密，并支持脱敏诊断、真实端点测试和已校验的 JSON 导入导出。
 
 ### 选中文本后处理功能介绍
@@ -73,6 +75,11 @@ flowchart LR
   L --> C
   C --> D["AudioRecord"]
   C --> E["内嵌 FFmpeg CLI"]
+  C --> SU["可选分片上传<br/>原始 PCM 振幅停顿分析与冻结计划"]
+  SU --> SE["FFmpeg CLI<br/>顺序导出独立完整媒体"]
+  SE --> SB["有界的完整识别工作流批次"]
+  SB --> F
+  SB --> AA
   C --> F["普通 OpenAI-compatible<br/>HttpURLConnection"]
   F --> G["用户普通 API URL"]
   C --> AA["AdvancedAudioClient<br/>校验并渲染工作流"]
@@ -95,7 +102,7 @@ flowchart LR
   T -->|"开启始终复制<br/>或直接写入明确失败"| I["剪贴板"]
   I -->|"直接写入明确失败"| P["ACTION_PASTE"]
   P --> X
-  J["配置页<br/>普通模式与高级工作流"] --> K["Preferences + Keystore"]
+  J["配置页<br/>普通模式、高级工作流与分片上传"] --> K["Preferences + Keystore"]
 ```
 
 ## 请求流程
@@ -121,20 +128,45 @@ sequenceDiagram
     U->>O: 单击
     O->>J: 停止并转写
     J->>R: 停止并保留原始录音
-    J->>F: 按当前设置转码
-    J->>V: POST OpenAI-compatible 转写请求
-    V-->>J: 返回最终文本
+    alt 已启用分片上传
+      J->>J: 分析原始 PCM 振幅停顿并冻结分片计划
+      J->>F: 顺序导出完整独立媒体文件
+      loop 有界的完整识别工作流
+        J->>V: 每个分片发送一条转写请求
+        V-->>J: 返回分片文本
+      end
+      Note over J,V: 仅在所有分片成功后按源顺序拼接文本
+    else 未启用分片上传
+      J->>F: 按当前设置转码
+      J->>V: POST OpenAI-compatible 转写请求
+      V-->>J: 返回最终文本
+    end
   else 高级非实时语音转写
     U->>O: 单击后再次单击
     O->>J: 录音、停止并保留原始录音
-    J->>F: 按当前设置转码
-    opt 工作流需要远端音频引用
-      J->>S: 发布编码音频
-      S-->>J: 公网 HTTPS URL 或 cloud URI
+    alt 已启用分片上传
+      J->>J: 分析原始 PCM 振幅停顿并冻结分片计划
+      J->>F: 顺序导出完整独立媒体文件
+      loop 有界的完整识别工作流
+        opt 工作流需要远端音频引用
+          J->>S: 发布一段编码媒体
+          S-->>J: 公网 HTTPS URL 或 cloud URI
+        end
+        J->>V: 已校验的请求、流式或异步工作流
+        Note over J,V: 轮询／结果可重试；submit 绝不重发
+        V-->>J: 返回分片文本
+      end
+      Note over J,V: 仅在所有分片成功后按源顺序拼接文本
+    else 未启用分片上传
+      J->>F: 按当前设置转码
+      opt 工作流需要远端音频引用
+        J->>S: 发布编码音频
+        S-->>J: 公网 HTTPS URL 或 cloud URI
+      end
+      J->>V: 已校验的请求、流式或异步工作流
+      Note over J,V: 轮询／结果可重试；submit 绝不重发
+      V-->>J: 返回最终文本
     end
-    J->>V: 已校验的请求、流式或异步工作流
-    Note over J,V: 轮询／结果可重试；submit 绝不重发
-    V-->>J: 返回最终文本
   else 高级实时语音转写
     U->>O: 单击
     O->>J: 开始录音
@@ -158,6 +190,7 @@ sequenceDiagram
     J->>P: 合并条目 JSON 后发送后处理请求
     P-->>J: 返回最终文本
   end
+  Note over J,V: 分片批次保留全部 PCM 帧和静音；失败或取消时不交付部分文本
   J->>J: 保持“请求中”，进入写入阶段
   J->>D: 投递文本（受任务 ID 和取消状态保护）
   D->>A: 按此刻的焦点和选区插入或替换
@@ -202,9 +235,10 @@ stateDiagram-v2
   录制中 --> 已暂停
   已暂停 --> 录制中
   录制中 --> 转码中: 停止
-  转码中 --> 请求中
+  转码中 --> 请求中: 单个媒体或分片导出
   请求中 --> 重试等待中: 普通、后处理或实时回放重试
-  重试等待中 --> 请求中
+  重试等待中 --> 请求中: 单个媒体、后处理或实时回放重试
+  重试等待中 --> 转码中: 分片上传重试
   请求中 --> 空闲: 请求或投递结束
   转码中 --> 空闲
   录制中 --> 空闲: 取消并丢弃
@@ -215,8 +249,14 @@ stateDiagram-v2
   note right of 请求中
     包含普通与高级 HTTP 阶段、
     远端上传和清理、流式／轮询／结果、
+    有界的完整分片工作流，以及仅在
+    全部成功后按源顺序拼接、
     实时收尾或 PCM 回放、写入验证、
     始终复制副本和粘贴兜底
+  end note
+  note right of 转码中
+    分片模式分析原始 PCM、冻结计划，
+    再由 FFmpeg 顺序导出完整独立媒体文件
   end note
   note right of 已暂停
     高级实时转写会结束当前会话；
@@ -287,7 +327,7 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 
 「录音设置」上方设有语言选项，默认英文，不随系统语言变化。列表依次为 English、中文、日本語、Deutsch、Français、Русский，选择后点击「保存设置」生效，覆盖界面、弹窗、状态提示和录音通知。此选项不改变语音转写的语言，也不修改用户填写的提示词和 API 参数。
 
-各设置区域不带编号，依次为：录音设置、音频 API 设置、改写 API 设置、高级音频 API 设置、重试设置、交互设置、显示设置。标题随界面语言切换；底部「关于」展示作者、邮箱、许可证、仓库地址和当前安装版本的版本号。
+各设置区域不带编号，依次为：录音设置、音频 API 设置、改写 API 设置、高级音频 API 设置、分片上传设置、重试设置、交互设置、显示设置。标题随界面语言切换；底部「关于」展示作者、邮箱、许可证、仓库地址和当前安装版本的版本号。
 
 「显示通知」开关反映系统中的应用通知及录音通知渠道状态。点击后进入系统通知设置，返回时自动同步；关闭通知不影响录音。Android 13 及以上版本关闭通知栏通知后，系统任务管理器仍可能显示正在运行的前台服务。此项由系统管理，不随应用配置导出。
 
@@ -296,6 +336,14 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 当普通 OpenAI-compatible 转写接口无法覆盖厂商协议时，可启用这项可选模式。粘贴兼容的声明式工作流，或填写需求并提供厂商文档、请求示例以生成工作流；只有校验并应用后，才填写动态生成的参数和密钥。
 
 已校验工作流通过公网 HTTPS URL 或云 URI 投递音频时，才显示远端音频设置。按需选择 WebDAV、S3-compatible 存储或阿里云 OSS。点击「测试工作流」会使用当前未保存的草稿、其声明的值和密钥访问真实端点。
+
+### 分片上传设置
+
+此功能默认关闭。默认最大分片时长为 495 秒，最小停顿时长为 700 ms，并发完整识别工作流数为 1。它适用于普通 OpenAI-compatible 转写，以及高级非实时 `request`、`request_stream`、`async_poll` 工作流，保留高级工作流支持的全部非实时投递方式：`multipart_file`、`raw_audio`、`base64`、`data_uri`、`public_https_url`、`cloud_uri`、`provider_upload`。它不适用于高级实时会话或 Rewrite。
+
+规划器分析原始 PCM 振幅，在接近上限的位置选择停顿，并保留包括静音在内的全部 PCM 帧。上限前没有合格停顿时，在上限处截断。FFmpeg 按顺序将每个连续区间导出为完整、独立的媒体文件；并发数限制的是完整识别工作流，不限制本地编码。
+
+只有全部分片成功，才按原始顺序直接拼接文本。任一分片失败或用户取消时，会取消尚未完成的工作且不交付部分文本。首次分片尝试会冻结分片计划和分片参数；自动重试与重发最近录音会按该计划从原始 PCM 重新导出，不重新分析停顿。
 
 ### 音频编码设置
 
@@ -364,7 +412,7 @@ MP3 使用 MP4 时要求至少 16 kHz；使用 FLV 时只提供 11.025、22.05�
 
 所选公共或独立 API 配置中的 Model 是默认值，最终请求按合并后的 Model 校验。Google 的最终模型用于请求 URL。附加参数应符合所选 Provider 的接口格式；字段删除后缺少接口必需参数时会收到配置或服务端错误。
 
-配置导出使用 `schemaVersion: 7`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标，以及不含密钥的 `advancedAudio` 配置。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。支持导入 1～7 版配置；第 7 版必须包含 `advancedAudio`，其中 1～4 版的 `bitrateKbps` 会换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
+配置导出使用 `schemaVersion: 8`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标，以及不含密钥的 `advancedAudio` 和 `segmentedUpload` 配置。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。支持导入 1～8 版配置；第 7、8 版都必须包含 `advancedAudio`，第 8 版还必须包含 `segmentedUpload`；导入 1～7 版时，分片上传初始化为关闭、495 秒、700 ms、并发 1。1～4 版的 `bitrateKbps` 会换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
 
 “始终复制到剪贴板”默认开启。关闭后恢复为仅兜底模式：只有当前焦点明确写入失败时才复制。无法确认写入结果时，不会自动重试或复制，因为文本仍可能已写入编辑器。
 

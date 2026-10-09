@@ -4,6 +4,9 @@
     <string name="settings_sample_rate_unsupported">サンプルレートがサポートされていません</string>
     <string name="settings_max_retries">最大再試行回数は 0～10 の範囲で指定してください</string>
     <string name="settings_initial_backoff">初回の待機時間は 0.1～60 秒の範囲で指定してください</string>
+    <string name="settings_segment_maximum_length">最大セグメント長は正の整数で指定してください</string>
+    <string name="settings_segment_minimum_pause">最小ポーズ時間は正の整数で指定してください</string>
+    <string name="settings_segment_concurrency">セグメントの同時アップロード数は 1～%1$d の範囲で指定してください</string>
     <string name="settings_long_press">長押し時間は 300～5000 ms の範囲で指定してください</string>
     <string name="settings_double_tap">ダブルタップの間隔は 150～1000 ms の範囲で指定してください</string>
     <string name="settings_recording_color">録音中の色は #RRGGBB 形式で指定してください</string>
@@ -91,6 +94,7 @@
     <string name="advanced_audio_generation_invalid">生成したワークフローを適用できませんでした：\n%1$s</string>
     <string name="advanced_audio_secret_hint">%1$s を入力</string>
     <string name="advanced_audio_not_set">未設定</string>
+    <string name="advanced_audio_selected_count">%1$d 件を選択</string>
     <string name="advanced_audio_invalid_values">テスト前に次の値を修正してください：\n%1$s</string>
     <string name="advanced_audio_required_value_missing">%1$s は必須です</string>
     <string name="advanced_audio_required_secret_missing">%1$s は必須です</string>

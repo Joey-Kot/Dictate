@@ -49,7 +49,7 @@ class PromptProviderSettingsTest {
         val prompts = PostProcessingProvider.entries.map { prompt.copy(id = it.name, provider = it) } + prompt.copy(provider = null)
         background { repository.savePrompts(prompts, prompts.associate { it.id to "private-${it.id}" }) }
         val json = repository.exportJson()
-        assertEquals(7, JSONObject(json).getInt("schemaVersion"))
+        assertEquals(8, JSONObject(json).getInt("schemaVersion"))
         assertFalse(json.contains("private-"))
         assertFalse(json.contains("apiKey"))
         val preview = repository.previewImport(json)

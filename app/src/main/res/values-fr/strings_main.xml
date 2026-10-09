@@ -8,6 +8,7 @@
     <string name="main_provider_section">Paramètres de l’API audio</string>
     <string name="main_post_processing_section">Paramètres de l’API de reformulation</string>
     <string name="main_advanced_audio_section">Paramètres de l’API audio avancée</string>
+    <string name="main_segmented_upload_section">Paramètres d’envoi segmenté</string>
     <string name="main_retry_section">Paramètres des nouvelles tentatives</string>
     <string name="main_interaction_section">Paramètres d’interaction</string>
     <string name="main_display_section">Paramètres d’affichage</string>
@@ -38,6 +39,11 @@
     <string name="main_auto_retry">Réessayer automatiquement (désactivé par défaut)</string>
     <string name="main_max_retries">Nombre maximal de tentatives</string>
     <string name="main_initial_backoff">Délai initial (secondes)</string>
+    <string name="main_enable_segmented_upload">Activer l’envoi segmenté (désactivé par défaut)</string>
+    <string name="main_maximum_segment_length">Durée maximale d’un segment (s)</string>
+    <string name="main_minimum_pause_duration">Durée minimale de pause (ms)</string>
+    <string name="main_segment_upload_concurrency">Envois de segments simultanés (1–%1$d)</string>
+    <string name="main_segmented_upload_help">Scinde les envois non temps réel aux pauses en requêtes indépendantes et les exécute en parallèle. L’enregistrement d’origine reste intact.</string>
     <string name="main_always_copy">Toujours copier le résultat dans le presse-papiers (activé par défaut)</string>
     <string name="main_long_press">Seuil d’appui long (ms)</string>
     <string name="main_double_tap">Intervalle maximal du double appui (ms)</string>

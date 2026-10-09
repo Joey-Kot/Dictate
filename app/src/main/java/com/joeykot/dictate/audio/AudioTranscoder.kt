@@ -28,8 +28,15 @@ class AudioTranscoder(
         inputFormat: Pcm16Format,
         output: File,
         plan: AudioEncodingPlan,
+        /**
+         * An operation-local cancellation probe for callers that deliberately
+         * do not use [cancel]'s retained pre-start marker.  Segmented export
+         * uses this path so cancelling the gap between two slices cannot
+         * leave an operation ID behind for a future, unrelated transcode.
+         */
+        cancellationRequested: (() -> Boolean)? = null,
     ): Result {
-        if (cancelledJobs.remove(jobId)) return Result.Cancelled
+        if (isCancelled(jobId, cancellationRequested, consumeMarker = true)) return Result.Cancelled
         if (!rawInput.isFile || rawInput.length() == 0L) {
             return Result.Failure(AppStrings.get(R.string.runtime_raw_recording_missing, "The original recording file is missing or empty"))
         }
@@ -55,7 +62,11 @@ class AudioTranscoder(
             processBuilder.environment()["LD_LIBRARY_PATH"] = context.applicationInfo.nativeLibraryDir
             val process = processBuilder.start()
             activeProcesses[jobId] = process
-            if (jobId in cancelledJobs) process.destroy()
+            // A segmented caller can be cancelled after its controller has
+            // handed the ID to us but before this process becomes visible.
+            // Check its operation-local flag again after publication so the
+            // process cannot escape that hand-off window.
+            if (isCancelled(jobId, cancellationRequested)) destroy(process)
 
             val tail = ArrayDeque<String>()
             process.inputStream.bufferedReader().useLines { lines ->
@@ -67,7 +78,7 @@ class AudioTranscoder(
             val exitCode = process.waitFor()
             activeProcesses.remove(jobId)
 
-            if (jobId in cancelledJobs) {
+            if (isCancelled(jobId, cancellationRequested)) {
                 output.delete()
                 Result.Cancelled
             } else if (exitCode == 0 && output.isFile && output.length() > 0L) {
@@ -89,7 +100,7 @@ class AudioTranscoder(
         } catch (error: Exception) {
             activeProcesses.remove(jobId)
             output.delete()
-            if (jobId in cancelledJobs) {
+            if (isCancelled(jobId, cancellationRequested)) {
                 Result.Cancelled
             } else {
                 val summary = diagnostics.sanitize(error.message ?: error.javaClass.simpleName)
@@ -103,10 +114,33 @@ class AudioTranscoder(
 
     fun cancel(jobId: Long) {
         cancelledJobs.add(jobId)
-        activeProcesses.remove(jobId)?.let { process ->
-            process.destroy()
-            if (process.isAlive) process.destroyForcibly()
+        cancelRunning(jobId)
+    }
+
+    /**
+     * Stop an already-started process without registering a retained
+     * pre-start cancellation marker.  This is required for sequential
+     * segmented exports: the next slice must not inherit cancellation meant
+     * only for the currently active slice.
+     */
+    fun cancelRunning(jobId: Long) {
+        activeProcesses.remove(jobId)?.let(::destroy)
+    }
+
+    private fun isCancelled(
+        jobId: Long,
+        cancellationRequested: (() -> Boolean)?,
+        consumeMarker: Boolean = false,
+    ): Boolean =
+        if (consumeMarker) {
+            cancelledJobs.remove(jobId) || cancellationRequested?.invoke() == true
+        } else {
+            jobId in cancelledJobs || cancellationRequested?.invoke() == true
         }
+
+    private fun destroy(process: Process) {
+        process.destroy()
+        if (process.isAlive) process.destroyForcibly()
     }
 
     private companion object {
