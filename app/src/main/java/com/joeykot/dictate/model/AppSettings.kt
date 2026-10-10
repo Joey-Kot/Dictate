@@ -58,7 +58,7 @@ data class SegmentedUploadConfig(
     }
 
     companion object {
-        const val DEFAULT_MAXIMUM_SEGMENT_LENGTH_SECONDS = 495
+        const val DEFAULT_MAXIMUM_SEGMENT_LENGTH_SECONDS = 295
         const val DEFAULT_MINIMUM_PAUSE_DURATION_MILLIS = 700
         const val DEFAULT_CONCURRENCY = 1
 

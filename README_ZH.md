@@ -339,7 +339,7 @@ GitHub Actions 是默认发布路径。推送到 `main`、`dev` 或使用可选 
 
 ### 分片上传设置
 
-此功能默认关闭。默认最大分片时长为 495 秒，最小停顿时长为 700 ms，并发完整识别工作流数为 1。它适用于普通 OpenAI-compatible 转写，以及高级非实时 `request`、`request_stream`、`async_poll` 工作流，保留高级工作流支持的全部非实时投递方式：`multipart_file`、`raw_audio`、`base64`、`data_uri`、`public_https_url`、`cloud_uri`、`provider_upload`。它不适用于高级实时会话或 Rewrite。
+此功能默认关闭。默认最大分片时长为 295 秒，最小停顿时长为 700 ms，并发完整识别工作流数为 1。它适用于普通 OpenAI-compatible 转写，以及高级非实时 `request`、`request_stream`、`async_poll` 工作流，保留高级工作流支持的全部非实时投递方式：`multipart_file`、`raw_audio`、`base64`、`data_uri`、`public_https_url`、`cloud_uri`、`provider_upload`。它不适用于高级实时会话或 Rewrite。
 
 规划器分析原始 PCM 振幅，在接近上限的位置选择停顿，并保留包括静音在内的全部 PCM 帧。上限前没有合格停顿时，在上限处截断。FFmpeg 按顺序将每个连续区间导出为完整、独立的媒体文件；并发数限制的是完整识别工作流，不限制本地编码。
 
@@ -412,7 +412,7 @@ MP3 使用 MP4 时要求至少 16 kHz；使用 FLV 时只提供 11.025、22.05�
 
 所选公共或独立 API 配置中的 Model 是默认值，最终请求按合并后的 Model 校验。Google 的最终模型用于请求 URL。附加参数应符合所选 Provider 的接口格式；字段删除后缺少接口必需参数时会收到配置或服务端错误。
 
-配置导出使用 `schemaVersion: 8`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标，以及不含密钥的 `advancedAudio` 和 `segmentedUpload` 配置。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。支持导入 1～8 版配置；第 7、8 版都必须包含 `advancedAudio`，第 8 版还必须包含 `segmentedUpload`；导入 1～7 版时，分片上传初始化为关闭、495 秒、700 ms、并发 1。1～4 版的 `bitrateKbps` 会换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
+配置导出使用 `schemaVersion: 8`，音频码率使用精确的 `audioOutput.bitrateBps`，同时包含界面语言 `language` 标签、后处理公共配置、有序提示词及可选的独立 API 配置、自定义图标，以及不含密钥的 `advancedAudio` 和 `segmentedUpload` 配置。提示词的 `provider` 为 `null` 表示继承，独立配置保存 `provider`、`baseUrl` 和 `model`。支持导入 1～8 版配置；第 7、8 版都必须包含 `advancedAudio`，第 8 版还必须包含 `segmentedUpload`；导入 1～7 版时，分片上传初始化为关闭、295 秒、700 ms、并发 1。1～4 版的 `bitrateKbps` 会换算为 bps；保留已有 PCM/WAV 设置，包括无符号 8-bit。旧版 Opus 的 32/44.1 kHz 选择迁移为 48 kHz，与此前实际编码输出一致。1～3 版配置的提示词默认为空列表，提示词缺少 `provider` 时继承主 API，没有 `language` 字段时默认英文。无效编码组合会在应用导入前被拒绝。
 
 “始终复制到剪贴板”默认开启。关闭后恢复为仅兜底模式：只有当前焦点明确写入失败时才复制。无法确认写入结果时，不会自动重试或复制，因为文本仍可能已写入编辑器。
 
